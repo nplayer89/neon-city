@@ -98,13 +98,17 @@ impl Roster {
         let name_max_w = icons_x - (x + 10.0) - 4.0;
         let mut hovered: Option<usize> = None;
 
+        // No row hover while a left-drag is in progress (map pans sweeping
+        // across the sidebar), except on the press frame so clicks register.
+        let hover_enabled = !is_mouse_button_down(MouseButton::Left) || is_mouse_button_pressed(MouseButton::Left);
+
         for (i, &id) in self.order.iter().enumerate() {
             let ry = list_top + i as f32 * ROW_H - self.scroll;
             // Partially clipped rows are skipped (no scissor in macroquad 2D).
             if ry < list_top || ry + ROW_H > y + h + 0.5 {
                 continue;
             }
-            if hovering_panel && my >= ry && my < ry + ROW_H {
+            if hover_enabled && hovering_panel && my >= ry && my < ry + ROW_H {
                 hovered = Some(id);
                 draw_rectangle(x, ry, w, ROW_H, Color::new(0.2, 0.9, 1.0, 0.12));
             }
