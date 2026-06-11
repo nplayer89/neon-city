@@ -409,6 +409,7 @@ git commit -m "feat: add hover-preview mode to inspector citizen panel"
 
 **Files:**
 - Modify: `src/main.rs`
+- Modify: `src/ui/camera.rs`
 
 - [ ] **Step 1: Create the roster at startup**
 
@@ -443,17 +444,59 @@ with (order matters: `draw_hud` resets `pointer_over_ui`, the roster sets it, th
         next_frame().await
 ```
 
-No change to `inspector.handle_click` is needed: it already ignores clicks when `hud.pointer_over_ui` was set (by the roster) on the previous frame — the same one-frame-lag convention the rest of the UI uses.
+No change to `inspector.handle_click` is needed for the common case: it already ignores clicks when `hud.pointer_over_ui` was set (by the roster) on the previous frame — the same one-frame-lag convention the rest of the UI uses.
 
-- [ ] **Step 3: Verify it compiles and tests stay green**
+- [ ] **Step 3: Guard world-click detection against presses that began over UI**
+
+Code review found one gesture that slips through: press on a roster row (selects the citizen), hold, drag onto the map, release over empty ground. On the release frame `pointer_over_ui` is false and `cam.dragged` is stale from the previous gesture, so `inspector.handle_click` runs and may set `Selection::None`, undoing the selection the roster just made.
+
+In `src/ui/camera.rs`, replace:
+
+```rust
+        if is_mouse_button_pressed(MouseButton::Left) && !ui_hover {
+            self.drag_anchor = Some((mx, my));
+            self.dragged = false;
+        }
+```
+
+with:
+
+```rust
+        if is_mouse_button_pressed(MouseButton::Left) {
+            if ui_hover {
+                // Press began over UI: poison the gesture so release-frame
+                // readers (inspector click detection) ignore it even if the
+                // pointer leaves the UI before release.
+                self.drag_anchor = None;
+                self.dragged = true;
+            } else {
+                self.drag_anchor = Some((mx, my));
+                self.dragged = false;
+            }
+        }
+```
+
+Also extend the doc comment on the `dragged` field:
+
+```rust
+    /// True if the most recent press turned into a drag. Also set when a
+    /// press begins over UI, so that gesture never reads as a world click.
+    /// Deliberately NOT cleared on release: release-frame readers
+    /// (click-vs-drag detection in the inspector, which runs after
+    /// Camera::update) rely on it. It resets on the next press. Do not read
+    /// it outside a release-frame context.
+    pub dragged: bool,
+```
+
+- [ ] **Step 4: Verify it compiles and tests stay green**
 
 Run: `cargo build && cargo test`
 Expected: build succeeds with no dead-code warnings from `roster.rs`; 33 tests pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/main.rs
+git add src/main.rs src/ui/camera.rs
 git commit -m "feat: wire citizen roster sidebar into main loop"
 ```
 
@@ -479,6 +522,7 @@ Run: `cargo run --release` and check each item:
 5. With the pointer over the sidebar: map does not pan when dragging, does not zoom when scrolling, and clicks do not select dots/buildings through the sidebar.
 6. Shrink the window vertically: the wheel scrolls the list over the sidebar, clamped at both ends.
 7. The bottom-left `POP/EMPLOYED/SEED` strip is not covered by the sidebar.
+8. Press a roster row, hold the button, drag onto the map, release over empty ground: the selection made on press survives (no deselect), and the map does not pan during that gesture.
 
 - [ ] **Step 3: Web build sanity check (optional but cheap)**
 
