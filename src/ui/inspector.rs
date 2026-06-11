@@ -56,10 +56,23 @@ impl Inspector {
         self.follow = false;
     }
 
-    pub fn draw(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState) {
+    /// `preview`: a citizen to show instead of the selection (roster hover).
+    /// Previewing never alters the selection or follow state.
+    pub fn draw(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, preview: Option<usize>) {
+        // Follow-centering stays tied to the selection even while previewing,
+        // so hovering a roster row never yanks a followed camera.
+        if self.follow {
+            if let Selection::Citizen(id) = self.selection {
+                cam.center = world.citizens[id].pos;
+            }
+        }
+        if let Some(id) = preview {
+            self.draw_citizen_panel(world, cam, hud, id, true);
+            return;
+        }
         match self.selection {
             Selection::None => {}
-            Selection::Citizen(id) => self.draw_citizen_panel(world, cam, hud, id),
+            Selection::Citizen(id) => self.draw_citizen_panel(world, cam, hud, id, false),
             Selection::Building(id) => self.draw_building_panel(world, hud, id),
         }
     }
@@ -69,7 +82,7 @@ impl Inspector {
         (screen_width() - w - 14.0, 66.0, w, 330.0)
     }
 
-    fn draw_citizen_panel(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, id: usize) {
+    fn draw_citizen_panel(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, id: usize, preview: bool) {
         let (x, y, w, h) = self.panel_rect();
         if over(x, y, w, h) {
             hud.pointer_over_ui = true;
@@ -131,14 +144,12 @@ impl Inspector {
         draw_text(&state_str, x + 90.0, by + 12.0, 15.0, state_color);
         by += 34.0;
 
-        let mut ui_hit = hud.pointer_over_ui;
-        if button(x + 14.0, by, 110.0, 30.0, if self.follow { "FOLLOWING" } else { "FOLLOW" }, self.follow, &mut ui_hit) {
-            self.follow = !self.follow;
-        }
-        hud.pointer_over_ui = ui_hit;
-
-        if self.follow {
-            cam.center = world.citizens[id].pos;
+        if !preview {
+            let mut ui_hit = hud.pointer_over_ui;
+            if button(x + 14.0, by, 110.0, 30.0, if self.follow { "FOLLOWING" } else { "FOLLOW" }, self.follow, &mut ui_hit) {
+                self.follow = !self.follow;
+            }
+            hud.pointer_over_ui = ui_hit;
         }
 
         // marker ring in-world

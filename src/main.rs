@@ -54,7 +54,7 @@ async fn main() {
         };
         render::draw_world(&world, &cam, t, sel_building, &traffic);
         ui::hud::draw_hud(&world, &mut hud);
-        inspector.draw(&world, &mut cam, &mut hud);
+        inspector.draw(&world, &mut cam, &mut hud, None);
         next_frame().await
     }
 }
