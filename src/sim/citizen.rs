@@ -2,6 +2,8 @@ use crate::sim::rng::Rng;
 use crate::sim::time::TICKS_PER_HOUR;
 use std::collections::VecDeque;
 
+/// Variant order is load-bearing: it indexes BASE_DECAY, Personality::weights
+/// and Personality::decay_mult. Do not reorder or insert variants.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NeedKind {
     Hunger,
@@ -26,7 +28,7 @@ impl NeedKind {
             NeedKind::Fun => "FUN",
         }
     }
-    fn index(&self) -> usize {
+    pub fn index(&self) -> usize {
         *self as usize
     }
 }
@@ -242,5 +244,13 @@ mod tests {
         assert_eq!(a.name, b.name);
         assert_eq!(a.personality.archetype, b.personality.archetype);
         assert_eq!(a.money, b.money);
+    }
+
+    #[test]
+    fn need_kind_discriminants_match_array_order() {
+        assert_eq!(NeedKind::Hunger.index(), 0);
+        assert_eq!(NeedKind::Energy.index(), 1);
+        assert_eq!(NeedKind::Hygiene.index(), 2);
+        assert_eq!(NeedKind::Fun.index(), 3);
     }
 }
