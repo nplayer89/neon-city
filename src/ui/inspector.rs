@@ -119,11 +119,11 @@ impl Inspector {
         // job + state
         by += 8.0;
         draw_text("WALLET", x + 14.0, by + 12.0, 15.0, Color::new(0.6, 0.75, 0.9, 0.9));
-        draw_text(&format!("₢ {:.0}", money), x + 90.0, by + 14.0, 18.0, Color::new(0.95, 0.85, 0.3, 1.0));
+        draw_text(&format!("${:.0}", money), x + 90.0, by + 14.0, 18.0, Color::new(0.95, 0.85, 0.3, 1.0));
         by += 26.0;
         let job = match &world.citizens[id].job {
             Some(j) => format!(
-                "{}  {:02}:00–{:02}:00  ₢{:.0}/h",
+                "{}  {:02}:00-{:02}:00  ${:.0}/h",
                 world.city.buildings[j.workplace as usize].kind.name(),
                 j.shift_start, j.shift_end, j.wage_per_hour
             ),
@@ -136,9 +136,9 @@ impl Inspector {
         let (state_str, state_color) = {
             let c = &world.citizens[id];
             let s = match &c.state {
-                CitizenState::Idle { .. } => "Idle — deciding".to_string(),
+                CitizenState::Idle { .. } => "Idle - deciding".to_string(),
                 CitizenState::Traveling { to, activity } => match to {
-                    Some(b) => format!("→ {} ({})", world.city.buildings[*b as usize].kind.name(), activity.label()),
+                    Some(b) => format!("> {} ({})", world.city.buildings[*b as usize].kind.name(), activity.label()),
                     None => "Strolling".to_string(),
                 },
                 CitizenState::Performing { at, activity } => {
@@ -188,7 +188,7 @@ impl Inspector {
         if b.kind.is_food() {
             draw_line_item("STOCK", &format!("{:.0} meals", b.stock), x, by);
             by += 24.0;
-            draw_line_item("PRICE", &format!("₢ {:.0}", crate::sim::economy::meal_price(b.kind)), x, by);
+            draw_line_item("PRICE", &format!("${:.0}", crate::sim::economy::meal_price(b.kind)), x, by);
             by += 24.0;
         }
         if b.kind.is_workplace() {
@@ -200,7 +200,7 @@ impl Inspector {
 
         by += 6.0;
         for &cid in b.occupants.iter().take(8) {
-            draw_text(&format!("· {}", world.citizens[cid].name), x + 14.0, by, 15.0, Color::new(0.8, 0.9, 1.0, 0.85));
+            draw_text(&format!("- {}", world.citizens[cid].name), x + 14.0, by, 15.0, Color::new(0.8, 0.9, 1.0, 0.85));
             by += 20.0;
         }
     }

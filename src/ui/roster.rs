@@ -35,8 +35,8 @@ pub fn band(value: f32) -> Band {
     }
 }
 
-/// Discrete status band for a wallet balance. ₢15 ≈ the priciest meal (₢12)
-/// plus slack; ₢40 ≈ several meals of cushion (spawn-range floor).
+/// Discrete status band for a wallet balance. $15 ≈ the priciest meal ($12)
+/// plus slack; $40 ≈ several meals of cushion (spawn-range floor).
 pub fn money_band(balance: f32) -> Band {
     if balance >= 40.0 {
         Band::High
@@ -50,9 +50,9 @@ pub fn money_band(balance: f32) -> Band {
 /// Compact wallet label, bounded to 5 chars so it always fits MONEY_COL_W.
 pub fn money_label(balance: f32) -> String {
     if balance >= 1000.0 {
-        format!("₢{:.0}k", (balance / 1000.0).floor())
+        format!("${:.0}k", (balance / 1000.0).floor())
     } else {
-        format!("₢{:.0}", balance)
+        format!("${:.0}", balance)
     }
 }
 
@@ -177,12 +177,12 @@ mod tests {
 
     #[test]
     fn money_label_compacts_large_balances() {
-        assert_eq!(money_label(0.0), "₢0");
-        assert_eq!(money_label(47.4), "₢47");
-        assert_eq!(money_label(999.0), "₢999");
-        assert_eq!(money_label(1000.0), "₢1k");
-        assert_eq!(money_label(12_345.0), "₢12k");
-        assert_eq!(money_label(999_999.0), "₢999k");
+        assert_eq!(money_label(0.0), "$0");
+        assert_eq!(money_label(47.4), "$47");
+        assert_eq!(money_label(999.0), "$999");
+        assert_eq!(money_label(1000.0), "$1k");
+        assert_eq!(money_label(12_345.0), "$12k");
+        assert_eq!(money_label(999_999.0), "$999k");
     }
 
     #[test]
