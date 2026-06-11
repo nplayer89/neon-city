@@ -4,5 +4,5 @@ pub mod city;
 pub mod path;
 pub mod citizen;
 pub mod economy;
-// pub mod ai;
+pub mod ai;
 // pub mod world;
