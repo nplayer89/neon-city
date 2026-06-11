@@ -1,4 +1,4 @@
-// pub mod rng;
+pub mod rng;
 // pub mod time;
 // pub mod city;
 // pub mod path;
