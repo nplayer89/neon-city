@@ -33,6 +33,18 @@ pub fn band(value: f32) -> Band {
     }
 }
 
+/// Discrete status band for a wallet balance. ₢15 ≈ the priciest meal (₢12)
+/// plus slack; ₢40 ≈ several meals of cushion (spawn-range floor).
+pub fn money_band(balance: f32) -> Band {
+    if balance >= 40.0 {
+        Band::High
+    } else if balance >= 15.0 {
+        Band::Medium
+    } else {
+        Band::Low
+    }
+}
+
 fn band_color(b: Band) -> Color {
     match b {
         Band::High => Color::new(0.3, 0.95, 0.5, 1.0),
@@ -137,6 +149,16 @@ mod tests {
         assert_eq!(band(0.59), Band::Medium);
         assert_eq!(band(0.6), Band::High);
         assert_eq!(band(1.0), Band::High);
+    }
+
+    #[test]
+    fn money_band_boundaries() {
+        assert_eq!(money_band(0.0), Band::Low);
+        assert_eq!(money_band(14.9), Band::Low);
+        assert_eq!(money_band(15.0), Band::Medium);
+        assert_eq!(money_band(39.9), Band::Medium);
+        assert_eq!(money_band(40.0), Band::High);
+        assert_eq!(money_band(500.0), Band::High);
     }
 
     #[test]
