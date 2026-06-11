@@ -26,6 +26,7 @@ async fn main() {
     let mut traffic = render::agents::Traffic::new(sim::city::CITY_W, sim::city::CITY_H, seed);
     let mut acc: f32 = 0.0;
     let mut hud = ui::hud::HudState::new();
+    let mut inspector = ui::inspector::Inspector::new();
 
     loop {
         let t = get_time() as f32;
@@ -46,8 +47,14 @@ async fn main() {
         traffic.update(traffic_dt, sim::city::CITY_W, sim::city::CITY_H);
 
         cam.update(hud.pointer_over_ui);
-        render::draw_world(&world, &cam, t, None, &traffic);
+        inspector.handle_click(&world, &cam, &hud);
+        let sel_building = match inspector.selection {
+            ui::inspector::Selection::Building(b) => Some(b),
+            _ => None,
+        };
+        render::draw_world(&world, &cam, t, sel_building, &traffic);
         ui::hud::draw_hud(&world, &mut hud);
+        inspector.draw(&world, &mut cam, &mut hud);
         next_frame().await
     }
 }
