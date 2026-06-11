@@ -10,7 +10,7 @@ pub fn day(tick: u64) -> u64 {
     tick / TICKS_PER_DAY + 1
 }
 
-/// Hour of day, 0..24.
+/// Hour of day, 0..=23.
 pub fn hour(tick: u64) -> u32 {
     ((tick % TICKS_PER_DAY) / TICKS_PER_HOUR) as u32
 }
@@ -20,7 +20,7 @@ pub fn hour_f(tick: u64) -> f32 {
     (tick % TICKS_PER_DAY) as f32 / TICKS_PER_HOUR as f32
 }
 
-/// Daylight factor 0.0 (deep night) ..= 1.0 (midday), peaking at 13:00.
+/// Daylight factor 0.0 (deep night) ..= 1.0 (peak at 13:00), drives ambient lighting.
 pub fn daylight(tick: u64) -> f32 {
     let t = (hour_f(tick) - 13.0) / 24.0 * std::f32::consts::TAU;
     (t.cos() * 0.5 + 0.5).powf(1.4)
@@ -47,9 +47,9 @@ mod tests {
     #[test]
     fn daylight_curve() {
         let noon = TICKS_PER_HOUR * 13;
-        let midnight = TICKS_PER_HOUR * 1;
+        let deep_night = TICKS_PER_HOUR * 1; // 01:00 is the cosine minimum (12 h antipodal to peak)
         assert!(daylight(noon) > 0.95);
-        assert!(daylight(midnight) < 0.05);
-        assert!(is_night(midnight) && !is_night(noon));
+        assert!(daylight(deep_night) < 0.05);
+        assert!(is_night(deep_night) && !is_night(noon));
     }
 }
