@@ -1,5 +1,5 @@
 use crate::sim::ai;
-use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind};
+use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind, NEED_KINDS};
 use crate::sim::city::{BuildingKind, City};
 use crate::sim::economy;
 use crate::sim::event::{push_event, EventKind, SimEvent};
@@ -92,7 +92,13 @@ impl World {
         let rng = &mut self.rng;
         let events = &mut self.events;
         for c in self.citizens.iter_mut() {
+            let before = c.needs;
             c.decay_needs();
+            for k in NEED_KINDS {
+                if before.get(k) >= ai::CRITICAL && c.needs.get(k) < ai::CRITICAL {
+                    push_event(events, SimEvent { tick, kind: EventKind::CriticalNeed { citizen: c.id, need: k } });
+                }
+            }
             self.wages_today += tick_citizen(c, city, rng, tick, hour, night, events);
         }
         if self.tick % TICKS_PER_DAY == 0 {
@@ -264,7 +270,8 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, _e
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::citizen::{Activity, CitizenState, Needs};
+    use crate::sim::ai;
+    use crate::sim::citizen::{Activity, CitizenState, NeedKind, Needs};
     use crate::sim::event::EventKind;
     use crate::sim::time::TICKS_PER_HOUR;
 
@@ -391,5 +398,26 @@ mod tests {
             .map(|b| b.stock)
             .sum();
         assert!(total_stock > 0.0, "city ran completely out of food");
+    }
+
+    #[test]
+    fn critical_need_event_fires_once_on_crossing() {
+        let mut w = World::new(31, 10);
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].needs.hunger = ai::CRITICAL + 0.005;
+        w.citizens[0].money = 0.0; // can't buy food, so hunger keeps falling
+        let mut crossings = 0;
+        for _ in 0..(TICKS_PER_HOUR * 4) {
+            w.tick();
+            for ev in w.drain_events() {
+                if let EventKind::CriticalNeed { citizen: 0, need: NeedKind::Hunger } = ev.kind {
+                    crossings += 1;
+                }
+            }
+        }
+        assert_eq!(crossings, 1, "edge trigger fired {crossings} times");
     }
 }

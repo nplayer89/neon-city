@@ -8,7 +8,8 @@ pub fn urgency(value: f32) -> f32 {
     d * d * (1.0 + 2.0 * d)
 }
 
-const CRITICAL: f32 = 0.15;
+/// Needs below this hijack the citizen's agenda (and emit a ticker event).
+pub const CRITICAL: f32 = 0.15;
 /// Needs above this are not worth acting on.
 const ACT_BELOW: f32 = 0.8;
 const DIST_PENALTY: f32 = 0.01;
