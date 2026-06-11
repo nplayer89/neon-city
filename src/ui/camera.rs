@@ -6,6 +6,10 @@ pub struct Camera {
     /// Pixels per tile.
     pub ppt: f32,
     drag_anchor: Option<(f32, f32)>,
+    /// True if the most recent press turned into a drag. Deliberately NOT
+    /// cleared on release: release-frame readers (click-vs-drag detection in
+    /// the inspector, which runs after Camera::update) rely on it. It resets
+    /// on the next press. Do not read it outside a release-frame context.
     pub dragged: bool,
 }
 
