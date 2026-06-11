@@ -3,6 +3,9 @@ mod sim;
 mod ui;
 
 use macroquad::prelude::*;
+use sim::time::TICK_DT;
+use sim::world::World;
+use ui::camera::Camera;
 
 fn window_conf() -> Conf {
     Conf {
@@ -17,9 +20,27 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    let seed = 2161;
+    let mut world = World::new(seed, 48);
+    let mut cam = Camera::new((sim::city::CITY_W as f32 / 2.0, sim::city::CITY_H as f32 / 2.0), 16.0);
+    let mut acc: f32 = 0.0;
+    let speed: u32 = 1;
+
     loop {
-        clear_background(Color::new(0.04, 0.05, 0.09, 1.0));
-        draw_text("NEON CITY — booting…", 40.0, 60.0, 32.0, Color::new(0.2, 0.9, 1.0, 1.0));
+        let t = get_time() as f32;
+        acc += get_frame_time() * speed as f32;
+        let mut steps = 0;
+        while acc >= TICK_DT && steps < 240 {
+            world.tick();
+            acc -= TICK_DT;
+            steps += 1;
+        }
+        if steps == 240 {
+            acc = 0.0;
+        }
+
+        cam.update(false);
+        render::draw_world(&world, &cam, t, None);
         next_frame().await
     }
 }
