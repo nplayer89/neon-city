@@ -1,6 +1,6 @@
 use crate::sim::rng::Rng;
 use crate::sim::time::TICKS_PER_HOUR;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 /// Variant order is load-bearing: it indexes BASE_DECAY, Personality::weights
 /// and Personality::decay_mult. Do not reorder or insert variants.
@@ -164,14 +164,51 @@ const LAST_NAMES: [&str; 16] = [
     "Kade", "Sorenson", "Anand", "Petrov", "Calloway", "Nyx", "Moreau", "Zhou",
 ];
 
-impl Citizen {
-    pub fn spawn(rng: &mut Rng, id: usize, home: u16, door_pos: (f32, f32)) -> Citizen {
+/// Draw a "First Last" name not already in `used`, inserting the result.
+/// Retries against the random pool, then falls back to generational suffixes
+/// ("Dex Petrov II") so uniqueness survives pool exhaustion (move-ins, births).
+pub fn unique_name(rng: &mut Rng, used: &mut HashSet<String>) -> String {
+    let mut base = String::new();
+    for _ in 0..64 {
         let first = FIRST_NAMES[rng.gen_range(0, FIRST_NAMES.len() as i32) as usize];
         let last = LAST_NAMES[rng.gen_range(0, LAST_NAMES.len() as i32) as usize];
+        base = format!("{first} {last}");
+        if used.insert(base.clone()) {
+            return base;
+        }
+    }
+    let mut n = 2;
+    loop {
+        let name = format!("{base} {}", roman(n));
+        if used.insert(name.clone()) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn roman(mut n: u32) -> String {
+    const VALS: [(u32, &str); 13] = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"),
+        (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    ];
+    let mut s = String::new();
+    for (v, r) in VALS {
+        while n >= v {
+            s.push_str(r);
+            n -= v;
+        }
+    }
+    s
+}
+
+impl Citizen {
+    pub fn spawn(rng: &mut Rng, id: usize, home: u16, door_pos: (f32, f32), used_names: &mut HashSet<String>) -> Citizen {
+        let name = unique_name(rng, used_names);
         let personality = ARCHETYPES[rng.gen_range(0, ARCHETYPES.len() as i32) as usize];
         Citizen {
             id,
-            name: format!("{first} {last}"),
+            name,
             pos: door_pos,
             home,
             job: None,
@@ -206,9 +243,13 @@ mod tests {
     use super::*;
     use crate::sim::rng::Rng;
 
+    fn spawn_one(seed: u64) -> Citizen {
+        Citizen::spawn(&mut Rng::new(seed), 0, 0, (1.5, 0.5), &mut HashSet::new())
+    }
+
     #[test]
     fn needs_decay_over_time() {
-        let mut c = Citizen::spawn(&mut Rng::new(5), 0, 0, (1.5, 0.5));
+        let mut c = spawn_one(5);
         c.needs = Needs::full();
         for _ in 0..1000 {
             c.decay_needs();
@@ -222,7 +263,7 @@ mod tests {
 
     #[test]
     fn needs_clamp_at_zero() {
-        let mut c = Citizen::spawn(&mut Rng::new(5), 0, 0, (1.5, 0.5));
+        let mut c = spawn_one(5);
         for _ in 0..2_000_000 {
             c.decay_needs();
         }
@@ -231,11 +272,22 @@ mod tests {
 
     #[test]
     fn spawn_is_deterministic() {
-        let a = Citizen::spawn(&mut Rng::new(9), 3, 1, (0.5, 0.5));
-        let b = Citizen::spawn(&mut Rng::new(9), 3, 1, (0.5, 0.5));
+        let a = Citizen::spawn(&mut Rng::new(9), 3, 1, (0.5, 0.5), &mut HashSet::new());
+        let b = Citizen::spawn(&mut Rng::new(9), 3, 1, (0.5, 0.5), &mut HashSet::new());
         assert_eq!(a.name, b.name);
         assert_eq!(a.personality.archetype, b.personality.archetype);
         assert_eq!(a.money, b.money);
+    }
+
+    #[test]
+    fn unique_name_survives_pool_exhaustion() {
+        // 400 draws > the 320 first+last combos, forcing the suffix fallback.
+        let mut rng = Rng::new(11);
+        let mut used = HashSet::new();
+        let names: Vec<String> = (0..400).map(|_| unique_name(&mut rng, &mut used)).collect();
+        let distinct: HashSet<&String> = names.iter().collect();
+        assert_eq!(distinct.len(), 400);
+        assert!(names.iter().any(|n| n.ends_with(" II")), "no generational suffix used");
     }
 
     #[test]

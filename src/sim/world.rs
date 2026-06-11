@@ -42,11 +42,12 @@ impl World {
             .map(|b| b.id)
             .collect();
 
+        let mut used_names = std::collections::HashSet::new();
         for i in 0..n_citizens {
             let home = homes[i % homes.len()];
             let door = world.city.buildings[home as usize].door;
             let pos = (door.0 as f32 + 0.5, door.1 as f32 + 0.5);
-            let mut c = Citizen::spawn(&mut world.rng, i, home, pos);
+            let mut c = Citizen::spawn(&mut world.rng, i, home, pos, &mut used_names);
             // ~80% employed
             if world.rng.chance(0.8) {
                 let wp = workplaces[i % workplaces.len()];
@@ -296,6 +297,17 @@ mod tests {
             b.tick();
         }
         assert_eq!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn citizen_names_are_unique() {
+        // Seed 2161 is the shipped seed; 100 stresses the 320-combo name pool.
+        for (seed, n) in [(2161u64, 48usize), (7, 100)] {
+            let w = World::new(seed, n);
+            let names: std::collections::HashSet<&str> =
+                w.citizens.iter().map(|c| c.name.as_str()).collect();
+            assert_eq!(names.len(), n, "duplicate names at seed {seed}");
+        }
     }
 
     #[test]

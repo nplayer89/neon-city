@@ -98,7 +98,7 @@ mod tests {
         let city = City::generate(&mut rng);
         let home = city.buildings.iter().find(|b| b.kind == BuildingKind::Apartment).unwrap();
         let door = (home.door.0 as f32 + 0.5, home.door.1 as f32 + 0.5);
-        let mut c = Citizen::spawn(&mut rng, 0, home.id, door);
+        let mut c = Citizen::spawn(&mut rng, 0, home.id, door, &mut std::collections::HashSet::new());
         c.needs = crate::sim::citizen::Needs::full();
         c.job = None;
         (city, c)
