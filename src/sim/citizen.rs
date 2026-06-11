@@ -42,6 +42,7 @@ pub struct Needs {
 }
 
 impl Needs {
+    #[cfg(test)]
     pub fn full() -> Self {
         Needs { hunger: 1.0, energy: 1.0, hygiene: 1.0, fun: 1.0 }
     }
@@ -126,15 +127,6 @@ impl Activity {
             Activity::Fun => "Having fun",
             Activity::Work => "Working",
             Activity::Stroll => "Strolling",
-        }
-    }
-    pub fn need(&self) -> Option<NeedKind> {
-        match self {
-            Activity::Sleep => Some(NeedKind::Energy),
-            Activity::Shower => Some(NeedKind::Hygiene),
-            Activity::Eat => Some(NeedKind::Hunger),
-            Activity::Fun => Some(NeedKind::Fun),
-            _ => None,
         }
     }
 }

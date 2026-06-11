@@ -91,6 +91,7 @@ impl World {
     }
 
     /// FNV-style digest of mutable sim state, for determinism tests.
+    #[cfg(test)]
     pub fn fingerprint(&self) -> u64 {
         fn mix(h: u64, v: u64) -> u64 {
             (h ^ v).wrapping_mul(0x100000001b3)
@@ -157,34 +158,33 @@ fn tick_citizen(
         }
         CitizenState::Performing { at, activity } => {
             let kind = city.buildings[at as usize].kind;
-            let mut done = false;
-            match activity {
+            let done = match activity {
                 Activity::Sleep => {
                     c.needs.add(NeedKind::Energy, economy::SLEEP_RATE);
-                    done = c.needs.energy >= 0.98;
+                    c.needs.energy >= 0.98
                 }
                 Activity::Shower => {
                     c.needs.add(NeedKind::Hygiene, economy::SHOWER_RATE);
-                    done = c.needs.hygiene >= 0.98;
+                    c.needs.hygiene >= 0.98
                 }
                 Activity::Eat => {
                     c.needs.add(NeedKind::Hunger, economy::eat_rate(kind));
-                    done = c.needs.hunger >= 0.97;
+                    c.needs.hunger >= 0.97
                 }
                 Activity::Fun => {
                     c.needs.add(NeedKind::Fun, economy::fun_rate(kind));
-                    done = c.needs.fun >= 0.97;
+                    c.needs.fun >= 0.97
                 }
                 Activity::Work => {
                     if let Some(job) = &c.job {
                         c.money += job.wage_per_hour / TICKS_PER_HOUR as f32;
-                        done = !job.in_shift(hour) || c.needs.min_value() < 0.08;
+                        !job.in_shift(hour) || c.needs.min_value() < 0.08
                     } else {
-                        done = true;
+                        true
                     }
                 }
-                Activity::Stroll => done = true,
-            }
+                Activity::Stroll => true,
+            };
             if done {
                 city.buildings[at as usize].occupants.retain(|&id| id != c.id);
                 let door = city.buildings[at as usize].door;
