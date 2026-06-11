@@ -16,7 +16,7 @@ pub fn lit(c: Color, amb: f32) -> Color {
     Color::new(c.r * a, c.g * a, c.b * a, c.a)
 }
 
-pub fn draw_world(world: &World, cam: &Camera, t: f32, selected_building: Option<u16>) {
+pub fn draw_world(world: &World, cam: &Camera, t: f32, selected_building: Option<u16>, traffic: &agents::Traffic) {
     let amb = time::daylight(world.tick);
     clear_background(Color::new(0.016, 0.02, 0.045, 1.0));
 
@@ -67,5 +67,6 @@ pub fn draw_world(world: &World, cam: &Camera, t: f32, selected_building: Option
     }
 
     buildings::draw_neon(world, cam, t, amb);
+    traffic.draw(cam, world.tick);
     agents::draw_citizens(world, cam, t);
 }

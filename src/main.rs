@@ -23,6 +23,7 @@ async fn main() {
     let seed = 2161;
     let mut world = World::new(seed, 48);
     let mut cam = Camera::new((sim::city::CITY_W as f32 / 2.0, sim::city::CITY_H as f32 / 2.0), 16.0);
+    let mut traffic = render::agents::Traffic::new(sim::city::CITY_W, sim::city::CITY_H, seed);
     let mut acc: f32 = 0.0;
     let speed: u32 = 1;
 
@@ -38,9 +39,10 @@ async fn main() {
         if steps == 240 {
             acc = 0.0;
         }
+        traffic.update(get_frame_time() * speed as f32, sim::city::CITY_W, sim::city::CITY_H);
 
         cam.update(false);
-        render::draw_world(&world, &cam, t, None);
+        render::draw_world(&world, &cam, t, None, &traffic);
         next_frame().await
     }
 }
