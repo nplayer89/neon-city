@@ -66,7 +66,7 @@ pub fn format_event(world: &World, ev: &SimEvent) -> (String, Selection) {
             Selection::Citizen(citizen),
         ),
         EventKind::DailyWages { day, total } => (
-            format!("[{stamp}] Day {day} wrap-up: ₢ {total:.0} paid in wages"),
+            format!("[{stamp}] Day {day} wrap-up: ${total:.0} paid in wages"),
             Selection::None,
         ),
     }
