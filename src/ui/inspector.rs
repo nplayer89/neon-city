@@ -6,12 +6,18 @@ use crate::ui::camera::Camera;
 use crate::ui::hud::{button, over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Selection {
     None,
     Citizen(usize),
     Building(u16),
 }
+
+/// Right-panel geometry, shared with the event log that sits below it.
+pub const PANEL_W: f32 = 300.0;
+pub const PANEL_MARGIN: f32 = 14.0;
+pub const PANEL_TOP: f32 = 66.0;
+pub const PANEL_H: f32 = 330.0;
 
 pub struct Inspector {
     pub selection: Selection,
@@ -78,8 +84,7 @@ impl Inspector {
     }
 
     fn panel_rect(&self) -> (f32, f32, f32, f32) {
-        let w = 300.0;
-        (screen_width() - w - 14.0, 66.0, w, 330.0)
+        (screen_width() - PANEL_W - PANEL_MARGIN, PANEL_TOP, PANEL_W, PANEL_H)
     }
 
     fn draw_citizen_panel(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, id: usize, preview: bool) {

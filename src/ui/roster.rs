@@ -3,11 +3,11 @@ use crate::sim::world::World;
 use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
 
-const SIDEBAR_W: f32 = 240.0;
+pub(crate) const SIDEBAR_W: f32 = 240.0;
 /// Below the 52 px top bar.
-const TOP: f32 = 52.0;
+pub(crate) const TOP: f32 = 52.0;
 /// Stops above the bottom-left population strip.
-const BOTTOM_MARGIN: f32 = 32.0;
+pub(crate) const BOTTOM_MARGIN: f32 = 32.0;
 const HEADER_H: f32 = 28.0;
 const ROW_H: f32 = 15.0;
 /// 4 icons, 7 px each on an 11 px stride, right-aligned 6 px from the trailing gap.
@@ -65,7 +65,7 @@ fn band_color(b: Band) -> Color {
 }
 
 /// Draws text clipped to `max_w` so long names never run under the icons.
-fn draw_clipped_text(text: &str, x: f32, y: f32, font_px: u16, max_w: f32, color: Color) {
+pub(crate) fn draw_clipped_text(text: &str, x: f32, y: f32, font_px: u16, max_w: f32, color: Color) {
     if measure_text(text, None, font_px, 1.0).width <= max_w {
         draw_text(text, x, y, font_px as f32, color);
         return;

@@ -1,10 +1,11 @@
 use crate::sim::ai;
-use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind};
+use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind, NEED_KINDS};
 use crate::sim::city::{BuildingKind, City};
 use crate::sim::economy;
+use crate::sim::event::{push_event, EventKind, SimEvent};
 use crate::sim::path;
 use crate::sim::rng::Rng;
-use crate::sim::time::{self, TICKS_PER_HOUR};
+use crate::sim::time::{self, TICKS_PER_DAY, TICKS_PER_HOUR};
 use std::collections::VecDeque;
 
 pub struct World {
@@ -13,6 +14,11 @@ pub struct World {
     pub citizens: Vec<Citizen>,
     pub tick: u64,
     pub seed: u64,
+    /// Events since the last drain (capped; see event::MAX_PENDING).
+    /// Private so the cap in push_event can't be bypassed; consume via drain_events.
+    events: VecDeque<SimEvent>,
+    /// Wages paid since the last midnight rollover.
+    wages_today: f32,
 }
 
 const SHIFTS: [(u32, u32); 3] = [(8, 16), (16, 24), (0, 8)];
@@ -23,7 +29,7 @@ impl World {
     pub fn new(seed: u64, n_citizens: usize) -> World {
         let mut rng = Rng::new(seed);
         let city = City::generate(&mut rng);
-        let mut world = World { rng, city, citizens: vec![], tick: 0, seed };
+        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0 };
 
         let homes: Vec<u16> = world
             .city
@@ -36,11 +42,12 @@ impl World {
             .map(|b| b.id)
             .collect();
 
+        let mut used_names = std::collections::HashSet::new();
         for i in 0..n_citizens {
             let home = homes[i % homes.len()];
             let door = world.city.buildings[home as usize].door;
             let pos = (door.0 as f32 + 0.5, door.1 as f32 + 0.5);
-            let mut c = Citizen::spawn(&mut world.rng, i, home, pos);
+            let mut c = Citizen::spawn(&mut world.rng, i, home, pos, &mut used_names);
             // ~80% employed
             if world.rng.chance(0.8) {
                 let wp = workplaces[i % workplaces.len()];
@@ -84,10 +91,27 @@ impl World {
         }
         let city = &mut self.city;
         let rng = &mut self.rng;
+        let events = &mut self.events;
         for c in self.citizens.iter_mut() {
+            let before = c.needs;
             c.decay_needs();
-            tick_citizen(c, city, rng, tick, hour, night);
+            for k in NEED_KINDS {
+                if before.get(k) >= ai::CRITICAL && c.needs.get(k) < ai::CRITICAL {
+                    push_event(events, SimEvent { tick, kind: EventKind::CriticalNeed { citizen: c.id, need: k } });
+                }
+            }
+            self.wages_today += tick_citizen(c, city, rng, tick, hour, night, events);
         }
+        if self.tick % TICKS_PER_DAY == 0 {
+            let summary = EventKind::DailyWages { day: time::day(self.tick) - 1, total: self.wages_today };
+            push_event(&mut self.events, SimEvent { tick: self.tick, kind: summary });
+            self.wages_today = 0.0;
+        }
+    }
+
+    /// Hand pending events to the UI (or tests); empties the queue.
+    pub fn drain_events(&mut self) -> Vec<SimEvent> {
+        self.events.drain(..).collect()
     }
 
     /// FNV-style digest of mutable sim state, for determinism tests.
@@ -119,11 +143,13 @@ fn tick_citizen(
     tick: u64,
     hour: u32,
     night: bool,
-) {
+    events: &mut VecDeque<SimEvent>,
+) -> f32 {
+    let mut wages = 0.0;
     match c.state {
         CitizenState::Idle { until } => {
             if tick < until {
-                return;
+                return wages;
             }
             if let Some((b, act)) = ai::choose_action(c, city, hour, night) {
                 start_travel(c, city, Some(b), act, tick, rng);
@@ -151,7 +177,7 @@ fn tick_citizen(
             }
             if c.path.is_empty() {
                 match to {
-                    Some(b) => arrive(c, city, b, activity, tick),
+                    Some(b) => arrive(c, city, b, activity, tick, events),
                     None => c.state = CitizenState::Idle { until: tick + rng.gen_range(60, 240) as u64 },
                 }
             }
@@ -177,7 +203,9 @@ fn tick_citizen(
                 }
                 Activity::Work => {
                     if let Some(job) = &c.job {
-                        c.money += job.wage_per_hour / TICKS_PER_HOUR as f32;
+                        let pay = job.wage_per_hour / TICKS_PER_HOUR as f32;
+                        c.money += pay;
+                        wages = pay;
                         !job.in_shift(hour) || c.needs.min_value() < 0.08
                     } else {
                         true
@@ -193,6 +221,7 @@ fn tick_citizen(
             }
         }
     }
+    wages
 }
 
 fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, tick: u64, rng: &mut Rng) {
@@ -213,17 +242,29 @@ fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, ti
     }
 }
 
-fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64) {
+fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, events: &mut VecDeque<SimEvent>) {
     let building = &mut city.buildings[b as usize];
     match act {
         Activity::Eat => {
+            // Stock ran out mid-walk; stay silent — VenueSoldOut already fired
+            // when the last meal sold.
+            if building.stock < 1.0 {
+                c.state = CitizenState::Idle { until: tick + 60 };
+                return;
+            }
             let price = economy::meal_price(building.kind);
-            if building.stock < 1.0 || c.money < price {
+            // Latent until money can drain mid-walk (Phase 2: rent/bills): the AI
+            // pre-filters unaffordable venues and nothing spends while Traveling.
+            if c.money < price {
+                push_event(events, SimEvent { tick, kind: EventKind::CantAffordMeal { citizen: c.id, building: b } });
                 c.state = CitizenState::Idle { until: tick + 60 };
                 return;
             }
             building.stock -= 1.0;
             c.money -= price;
+            if building.stock < 1.0 {
+                push_event(events, SimEvent { tick, kind: EventKind::VenueSoldOut { building: b } });
+            }
         }
         Activity::Fun => {
             let price = economy::fun_price(building.kind);
@@ -242,7 +283,9 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::citizen::{Activity, CitizenState, Needs};
+    use crate::sim::ai;
+    use crate::sim::citizen::{Activity, CitizenState, NeedKind, Needs};
+    use crate::sim::event::EventKind;
     use crate::sim::time::TICKS_PER_HOUR;
 
     #[test]
@@ -254,6 +297,17 @@ mod tests {
             b.tick();
         }
         assert_eq!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn citizen_names_are_unique() {
+        // Seed 2161 is the shipped seed; 100 adds collision pressure on the pool.
+        for (seed, n) in [(2161u64, 48usize), (7, 100)] {
+            let w = World::new(seed, n);
+            let names: std::collections::HashSet<&str> =
+                w.citizens.iter().map(|c| c.name.as_str()).collect();
+            assert_eq!(names.len(), n, "duplicate names at seed {seed}");
+        }
     }
 
     #[test]
@@ -306,6 +360,25 @@ mod tests {
         assert!(w.citizens[0].money > before, "no wages paid");
     }
 
+    #[test]
+    fn daily_wage_summary_emitted_at_midnight() {
+        let mut w = World::new(99, 40);
+        let mut summaries = vec![];
+        for _ in 0..crate::sim::time::TICKS_PER_DAY {
+            w.tick();
+            for ev in w.drain_events() {
+                if let EventKind::DailyWages { day, total } = ev.kind {
+                    summaries.push((day, total, ev.tick));
+                }
+            }
+        }
+        assert_eq!(summaries.len(), 1, "expected exactly one daily summary");
+        let (day, total, tick) = summaries[0];
+        assert_eq!(day, 1);
+        assert!(total > 0.0, "no wages accumulated");
+        assert_eq!(tick, crate::sim::time::TICKS_PER_DAY);
+    }
+
     /// End-to-end: over one full day, citizens work their shifts, sleep at
     /// night, and buy meals. Locks the sim's daily rhythm against regressions.
     #[test]
@@ -349,5 +422,79 @@ mod tests {
             .map(|b| b.stock)
             .sum();
         assert!(total_stock > 0.0, "city ran completely out of food");
+    }
+
+    #[test]
+    fn selling_last_meal_emits_sold_out_once() {
+        let mut w = World::new(17, 6);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
+            b.stock = 0.0;
+        }
+        w.city.buildings[venue as usize].stock = 1.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        // Walk citizen 0 straight in: empty path + Traveling = arrive on next tick.
+        w.citizens[0].money = 100.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
+
+        let mut sold_out = 0;
+        // 200 ticks < TICKS_PER_HOUR (600), so no hourly restock can interfere.
+        for _ in 0..200 {
+            w.tick();
+            for ev in w.drain_events() {
+                if ev.kind == (EventKind::VenueSoldOut { building: venue }) {
+                    sold_out += 1;
+                }
+            }
+        }
+        assert_eq!(sold_out, 1, "sold-out fired {sold_out} times");
+        assert!(w.city.buildings[venue as usize].stock < 1.0);
+    }
+
+    #[test]
+    fn arriving_broke_emits_cant_afford() {
+        let mut w = World::new(17, 6);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        w.city.buildings[venue as usize].stock = 10.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].money = 0.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
+
+        w.tick();
+        let events = w.drain_events();
+        assert!(
+            events.iter().any(|e| e.kind == (EventKind::CantAffordMeal { citizen: 0, building: venue })),
+            "no cant-afford event in {events:?}"
+        );
+        assert!(matches!(w.citizens[0].state, CitizenState::Idle { .. }));
+    }
+
+    #[test]
+    fn critical_need_event_fires_once_on_crossing() {
+        let mut w = World::new(31, 10);
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].needs.hunger = ai::CRITICAL + 0.005;
+        w.citizens[0].money = 0.0; // can't buy food, so hunger keeps falling
+        let mut crossings = 0;
+        for _ in 0..(TICKS_PER_HOUR * 4) {
+            w.tick();
+            for ev in w.drain_events() {
+                if let EventKind::CriticalNeed { citizen: 0, need: NeedKind::Hunger } = ev.kind {
+                    crossings += 1;
+                }
+            }
+        }
+        assert_eq!(crossings, 1, "edge trigger fired {crossings} times");
     }
 }
