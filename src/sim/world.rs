@@ -15,7 +15,8 @@ pub struct World {
     pub tick: u64,
     pub seed: u64,
     /// Events since the last drain (capped; see event::MAX_PENDING).
-    pub events: VecDeque<SimEvent>,
+    /// Private so the cap in push_event can't be bypassed; consume via drain_events.
+    events: VecDeque<SimEvent>,
     /// Wages paid since the last midnight rollover.
     wages_today: f32,
 }
@@ -90,12 +91,10 @@ impl World {
         let city = &mut self.city;
         let rng = &mut self.rng;
         let events = &mut self.events;
-        let mut wages = 0.0;
         for c in self.citizens.iter_mut() {
             c.decay_needs();
-            wages += tick_citizen(c, city, rng, tick, hour, night, events);
+            self.wages_today += tick_citizen(c, city, rng, tick, hour, night, events);
         }
-        self.wages_today += wages;
         if self.tick % TICKS_PER_DAY == 0 {
             let summary = EventKind::DailyWages { day: time::day(self.tick) - 1, total: self.wages_today };
             push_event(&mut self.events, SimEvent { tick: self.tick, kind: summary });
