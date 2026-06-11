@@ -97,7 +97,6 @@ impl Inspector {
         };
         draw_text(&name, x + 14.0, y + 30.0, 26.0, WHITE);
         draw_text(archetype, x + 14.0, y + 52.0, 18.0, Color::new(1.0, 0.3, 0.85, 0.9));
-        draw_text(&format!("₢ {:.0}", money), x + w - 80.0, y + 30.0, 22.0, Color::new(0.95, 0.85, 0.3, 1.0));
 
         // need bars
         let mut by = y + 78.0;
@@ -114,6 +113,9 @@ impl Inspector {
 
         // job + state
         by += 8.0;
+        draw_text("WALLET", x + 14.0, by + 12.0, 15.0, Color::new(0.6, 0.75, 0.9, 0.9));
+        draw_text(&format!("₢ {:.0}", money), x + 90.0, by + 14.0, 18.0, Color::new(0.95, 0.85, 0.3, 1.0));
+        by += 26.0;
         let job = match &world.citizens[id].job {
             Some(j) => format!(
                 "{}  {:02}:00–{:02}:00  ₢{:.0}/h",
