@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn citizen_names_are_unique() {
-        // Seed 2161 is the shipped seed; 100 stresses the 320-combo name pool.
+        // Seed 2161 is the shipped seed; 100 adds collision pressure on the pool.
         for (seed, n) in [(2161u64, 48usize), (7, 100)] {
             let w = World::new(seed, n);
             let names: std::collections::HashSet<&str> =

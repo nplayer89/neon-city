@@ -155,13 +155,18 @@ pub struct Citizen {
     pub speed: f32,
 }
 
-const FIRST_NAMES: [&str; 20] = [
+const FIRST_NAMES: [&str; 48] = [
     "Aria", "Juno", "Kai", "Vesper", "Orion", "Nova", "Ezra", "Lyra", "Dex", "Mira",
     "Caspian", "Zara", "Niko", "Echo", "Sol", "Indra", "Rune", "Vega", "Atlas", "Wren",
+    "Kira", "Soren", "Ravi", "Luna", "Jax", "Imara", "Theo", "Sable", "Yuki", "Dario",
+    "Elara", "Finn", "Noor", "Cassia", "Remy", "Tova", "Idris", "Maeve", "Zephyr", "Anya",
+    "Bodhi", "Selene", "Cyrus", "Ines", "Kenji", "Priya", "Malik", "Nadia",
 ];
-const LAST_NAMES: [&str; 16] = [
+const LAST_NAMES: [&str; 32] = [
     "Tanaka", "Voss", "Okafor", "Reyes", "Stellan", "Qiu", "Marlowe", "Ito",
     "Kade", "Sorenson", "Anand", "Petrov", "Calloway", "Nyx", "Moreau", "Zhou",
+    "Halloran", "Mbeki", "Lindqvist", "Duarte", "Kowalski", "Sato", "Vance", "Iyer",
+    "Brandt", "Okonkwo", "Castillo", "Nakamura", "Eriksen", "Adeyemi", "Solano", "Mercer",
 ];
 
 /// Draw a "First Last" name not already in `used`, inserting the result.
@@ -281,12 +286,14 @@ mod tests {
 
     #[test]
     fn unique_name_survives_pool_exhaustion() {
-        // 400 draws > the 320 first+last combos, forcing the suffix fallback.
+        // More draws than first+last combos, forcing the suffix fallback.
+        let pool = FIRST_NAMES.len() * LAST_NAMES.len();
+        let draws = pool + 100;
         let mut rng = Rng::new(11);
         let mut used = HashSet::new();
-        let names: Vec<String> = (0..400).map(|_| unique_name(&mut rng, &mut used)).collect();
+        let names: Vec<String> = (0..draws).map(|_| unique_name(&mut rng, &mut used)).collect();
         let distinct: HashSet<&String> = names.iter().collect();
-        assert_eq!(distinct.len(), 400);
+        assert_eq!(distinct.len(), draws);
         assert!(names.iter().any(|n| n.ends_with(" II")), "no generational suffix used");
     }
 
