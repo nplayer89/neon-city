@@ -68,7 +68,7 @@ pub fn format_event(world: &World, ev: &SimEvent) -> (String, Selection) {
     }
 }
 
-fn event_color(kind: &EventKind) -> Color {
+fn event_color(kind: EventKind) -> Color {
     match kind {
         EventKind::VenueSoldOut { .. } => Color::new(1.0, 0.75, 0.25, 1.0),
         EventKind::CriticalNeed { .. } => Color::new(1.0, 0.35, 0.35, 1.0),
@@ -87,7 +87,7 @@ impl Ticker {
         if self.entries.len() == MAX_ENTRIES {
             self.entries.pop_front();
         }
-        self.entries.push_back(Entry { text, target, color: event_color(&ev.kind) });
+        self.entries.push_back(Entry { text, target, color: event_color(ev.kind) });
     }
 
     /// Bottom strip, newest row last. Returns a clicked row's target.

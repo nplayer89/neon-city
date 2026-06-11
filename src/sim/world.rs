@@ -252,6 +252,8 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
                 return;
             }
             let price = economy::meal_price(building.kind);
+            // Latent until money can drain mid-walk (Phase 2: rent/bills): the AI
+            // pre-filters unaffordable venues and nothing spends while Traveling.
             if c.money < price {
                 push_event(events, SimEvent { tick, kind: EventKind::CantAffordMeal { citizen: c.id, building: b } });
                 c.state = CitizenState::Idle { until: tick + 60 };
