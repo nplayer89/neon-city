@@ -78,7 +78,7 @@ impl Traffic {
         let mut vehicles = vec![];
         for _ in 0..16 {
             let along_x = rng.chance(0.5);
-            let lane = rng.gen_range(0, 8) * crate::sim::city::BLOCK;
+            let lane = rng.gen_range(0, 9) * crate::sim::city::BLOCK;
             let sign = if rng.chance(0.5) { 1.0 } else { -1.0 };
             let off = 0.5 + sign * 0.22; // drive on the right
             let (pos, dir) = if along_x {
