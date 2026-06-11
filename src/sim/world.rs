@@ -241,17 +241,25 @@ fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, ti
     }
 }
 
-fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, _events: &mut VecDeque<SimEvent>) {
+fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, events: &mut VecDeque<SimEvent>) {
     let building = &mut city.buildings[b as usize];
     match act {
         Activity::Eat => {
+            if building.stock < 1.0 {
+                c.state = CitizenState::Idle { until: tick + 60 };
+                return;
+            }
             let price = economy::meal_price(building.kind);
-            if building.stock < 1.0 || c.money < price {
+            if c.money < price {
+                push_event(events, SimEvent { tick, kind: EventKind::CantAffordMeal { citizen: c.id, building: b } });
                 c.state = CitizenState::Idle { until: tick + 60 };
                 return;
             }
             building.stock -= 1.0;
             c.money -= price;
+            if building.stock < 1.0 {
+                push_event(events, SimEvent { tick, kind: EventKind::VenueSoldOut { building: b } });
+            }
         }
         Activity::Fun => {
             let price = economy::fun_price(building.kind);
@@ -398,6 +406,58 @@ mod tests {
             .map(|b| b.stock)
             .sum();
         assert!(total_stock > 0.0, "city ran completely out of food");
+    }
+
+    #[test]
+    fn selling_last_meal_emits_sold_out_once() {
+        let mut w = World::new(17, 6);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
+            b.stock = 0.0;
+        }
+        w.city.buildings[venue as usize].stock = 1.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        // Walk citizen 0 straight in: empty path + Traveling = arrive on next tick.
+        w.citizens[0].money = 100.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
+
+        let mut sold_out = 0;
+        for _ in 0..200 {
+            w.tick();
+            for ev in w.drain_events() {
+                if ev.kind == (EventKind::VenueSoldOut { building: venue }) {
+                    sold_out += 1;
+                }
+            }
+        }
+        assert_eq!(sold_out, 1, "sold-out fired {sold_out} times");
+        assert!(w.city.buildings[venue as usize].stock < 1.0);
+    }
+
+    #[test]
+    fn arriving_broke_emits_cant_afford() {
+        let mut w = World::new(17, 6);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        w.city.buildings[venue as usize].stock = 10.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].money = 0.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
+
+        w.tick();
+        let events = w.drain_events();
+        assert!(
+            events.iter().any(|e| e.kind == (EventKind::CantAffordMeal { citizen: 0, building: venue })),
+            "no cant-afford event in {events:?}"
+        );
+        assert!(matches!(w.citizens[0].state, CitizenState::Idle { .. }));
     }
 
     #[test]
