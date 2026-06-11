@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 
 /// Sim-layer happenings surfaced by the UI news ticker.
 /// Plain data only — wording and colors are the UI's job.
+// PartialEq is derived; DailyWages::total is f32 — avoid == comparisons on that variant.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum EventKind {
     /// A food venue's last meal was just sold.
