@@ -6,10 +6,12 @@ pub struct Camera {
     /// Pixels per tile.
     pub ppt: f32,
     drag_anchor: Option<(f32, f32)>,
-    /// True if the most recent press turned into a drag. Deliberately NOT
-    /// cleared on release: release-frame readers (click-vs-drag detection in
-    /// the inspector, which runs after Camera::update) rely on it. It resets
-    /// on the next press. Do not read it outside a release-frame context.
+    /// True if the most recent press turned into a drag. Also set when a
+    /// press begins over UI, so that gesture never reads as a world click.
+    /// Deliberately NOT cleared on release: release-frame readers
+    /// (click-vs-drag detection in the inspector, which runs after
+    /// Camera::update) rely on it. It resets on the next press. Do not read
+    /// it outside a release-frame context.
     pub dragged: bool,
 }
 
@@ -44,9 +46,17 @@ impl Camera {
             self.center.0 += before.0 - after.0;
             self.center.1 += before.1 - after.1;
         }
-        if is_mouse_button_pressed(MouseButton::Left) && !ui_hover {
-            self.drag_anchor = Some((mx, my));
-            self.dragged = false;
+        if is_mouse_button_pressed(MouseButton::Left) {
+            if ui_hover {
+                // Press began over UI: poison the gesture so release-frame
+                // readers (inspector click detection) ignore it even if the
+                // pointer leaves the UI before release.
+                self.drag_anchor = None;
+                self.dragged = true;
+            } else {
+                self.drag_anchor = Some((mx, my));
+                self.dragged = false;
+            }
         }
         if is_mouse_button_down(MouseButton::Left) {
             if let Some((ax, ay)) = self.drag_anchor {

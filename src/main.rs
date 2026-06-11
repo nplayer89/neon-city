@@ -27,6 +27,7 @@ async fn main() {
     let mut acc: f32 = 0.0;
     let mut hud = ui::hud::HudState::new();
     let mut inspector = ui::inspector::Inspector::new();
+    let mut roster = ui::roster::Roster::new(&world);
 
     loop {
         let t = get_time() as f32;
@@ -54,7 +55,14 @@ async fn main() {
         };
         render::draw_world(&world, &cam, t, sel_building, &traffic);
         ui::hud::draw_hud(&world, &mut hud);
-        inspector.draw(&world, &mut cam, &mut hud, None);
+        let (hovered, roster_clicked) = roster.draw(&world, &mut hud);
+        if roster_clicked {
+            if let Some(id) = hovered {
+                inspector.selection = ui::inspector::Selection::Citizen(id);
+                inspector.follow = false;
+            }
+        }
+        inspector.draw(&world, &mut cam, &mut hud, hovered);
         next_frame().await
     }
 }
