@@ -28,6 +28,7 @@ async fn main() {
     let mut hud = ui::hud::HudState::new();
     let mut inspector = ui::inspector::Inspector::new();
     let mut roster = ui::roster::Roster::new(&world);
+    let mut ticker = ui::ticker::Ticker::new();
 
     loop {
         let t = get_time() as f32;
@@ -42,6 +43,9 @@ async fn main() {
         }
         if steps == 240 {
             acc = 0.0;
+        }
+        for ev in world.drain_events() {
+            ticker.push(&world, &ev);
         }
         // Visual traffic is capped at 4x so vehicles don't teleport at 16x sim speed.
         let traffic_dt = if hud.paused { 0.0 } else { get_frame_time() * hud.speed.min(4) as f32 };
@@ -61,6 +65,10 @@ async fn main() {
                 inspector.selection = ui::inspector::Selection::Citizen(id);
                 inspector.follow = false;
             }
+        }
+        if let Some(sel) = ticker.draw(&mut hud) {
+            inspector.selection = sel;
+            inspector.follow = false;
         }
         inspector.draw(&world, &mut cam, &mut hud, hovered);
         next_frame().await
