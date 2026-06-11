@@ -25,11 +25,13 @@ async fn main() {
     let mut cam = Camera::new((sim::city::CITY_W as f32 / 2.0, sim::city::CITY_H as f32 / 2.0), 16.0);
     let mut traffic = render::agents::Traffic::new(sim::city::CITY_W, sim::city::CITY_H, seed);
     let mut acc: f32 = 0.0;
-    let speed: u32 = 1;
+    let mut hud = ui::hud::HudState::new();
 
     loop {
         let t = get_time() as f32;
-        acc += get_frame_time() * speed as f32;
+        if !hud.paused {
+            acc += get_frame_time() * hud.speed as f32;
+        }
         let mut steps = 0;
         while acc >= TICK_DT && steps < 240 {
             world.tick();
@@ -39,10 +41,12 @@ async fn main() {
         if steps == 240 {
             acc = 0.0;
         }
-        traffic.update(get_frame_time() * speed as f32, sim::city::CITY_W, sim::city::CITY_H);
+        let traffic_dt = if hud.paused { 0.0 } else { get_frame_time() * hud.speed.min(4) as f32 };
+        traffic.update(traffic_dt, sim::city::CITY_W, sim::city::CITY_H);
 
-        cam.update(false);
+        cam.update(hud.pointer_over_ui);
         render::draw_world(&world, &cam, t, None, &traffic);
+        ui::hud::draw_hud(&world, &mut hud);
         next_frame().await
     }
 }
