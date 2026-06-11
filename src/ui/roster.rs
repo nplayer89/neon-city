@@ -1,5 +1,18 @@
-use macroquad::prelude::*;
+use crate::sim::citizen::NEED_KINDS;
 use crate::sim::world::World;
+use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
+use macroquad::prelude::*;
+
+const SIDEBAR_W: f32 = 200.0;
+/// Below the 52 px top bar.
+const TOP: f32 = 52.0;
+/// Stops above the bottom-left population strip.
+const BOTTOM_MARGIN: f32 = 32.0;
+const HEADER_H: f32 = 28.0;
+const ROW_H: f32 = 15.0;
+/// 4 icons, 7 px each with 4 px gaps, 6 px right padding.
+const ICON_STRIDE: f32 = 11.0;
+const ICON_SIZE: f32 = 7.0;
 
 /// Discrete status band for a need value in [0, 1].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -28,6 +41,19 @@ fn band_color(b: Band) -> Color {
     }
 }
 
+/// Draws text clipped to `max_w` so long names never run under the icons.
+fn draw_clipped_text(text: &str, x: f32, y: f32, font_px: u16, max_w: f32, color: Color) {
+    if measure_text(text, None, font_px, 1.0).width <= max_w {
+        draw_text(text, x, y, font_px as f32, color);
+        return;
+    }
+    let mut s = text.to_string();
+    while !s.is_empty() && measure_text(&s, None, font_px, 1.0).width > max_w {
+        s.pop();
+    }
+    draw_text(&s, x, y, font_px as f32, color);
+}
+
 pub struct Roster {
     /// Citizen ids sorted alphabetically by name; the population is fixed
     /// after world creation, so this is computed once.
@@ -40,6 +66,58 @@ impl Roster {
         let mut order: Vec<usize> = (0..world.citizens.len()).collect();
         order.sort_by(|&a, &b| world.citizens[a].name.cmp(&world.citizens[b].name));
         Roster { order, scroll: 0.0 }
+    }
+
+    /// Draws the sidebar. Returns (hovered citizen id, clicked this frame).
+    /// Sets `hud.pointer_over_ui` when the pointer is over the sidebar.
+    pub fn draw(&mut self, world: &World, hud: &mut HudState) -> (Option<usize>, bool) {
+        let (x, y, w) = (0.0, TOP, SIDEBAR_W);
+        let h = screen_height() - TOP - BOTTOM_MARGIN;
+        let hovering_panel = over(x, y, w, h);
+        if hovering_panel {
+            hud.pointer_over_ui = true;
+        }
+
+        draw_rectangle(x, y, w, h, PANEL);
+        draw_rectangle_lines(x, y, w, h, 1.5, PANEL_EDGE);
+        draw_text("CITIZENS", x + 10.0, y + 19.0, 18.0, CYAN);
+
+        let list_top = y + HEADER_H;
+        let list_h = h - HEADER_H;
+        let max_scroll = (self.order.len() as f32 * ROW_H - list_h).max(0.0);
+        if hovering_panel {
+            let wheel = mouse_wheel().1;
+            if wheel.abs() > 0.0 {
+                self.scroll -= wheel.signum() * ROW_H * 3.0;
+            }
+        }
+        self.scroll = self.scroll.clamp(0.0, max_scroll);
+
+        let (_, my) = mouse_position();
+        let icons_x = x + w - 6.0 - NEED_KINDS.len() as f32 * ICON_STRIDE;
+        let name_max_w = icons_x - (x + 10.0) - 4.0;
+        let mut hovered: Option<usize> = None;
+
+        for (i, &id) in self.order.iter().enumerate() {
+            let ry = list_top + i as f32 * ROW_H - self.scroll;
+            // Partially clipped rows are skipped (no scissor in macroquad 2D).
+            if ry < list_top || ry + ROW_H > y + h {
+                continue;
+            }
+            if hovering_panel && my >= ry && my < ry + ROW_H {
+                hovered = Some(id);
+                draw_rectangle(x, ry, w, ROW_H, Color::new(0.2, 0.9, 1.0, 0.12));
+            }
+            let c = &world.citizens[id];
+            draw_clipped_text(&c.name, x + 10.0, ry + 11.5, 15, name_max_w, Color::new(0.8, 0.9, 1.0, 0.9));
+            for (j, k) in NEED_KINDS.iter().enumerate() {
+                let color = band_color(band(c.needs.get(*k)));
+                draw_rectangle(icons_x + j as f32 * ICON_STRIDE, ry + 4.0, ICON_SIZE, ICON_SIZE, color);
+            }
+        }
+
+        let clicked = hovered.is_some() && is_mouse_button_pressed(MouseButton::Left);
+        (hovered, clicked)
     }
 }
 
