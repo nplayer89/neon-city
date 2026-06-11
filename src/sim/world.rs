@@ -305,4 +305,49 @@ mod tests {
         }
         assert!(w.citizens[0].money > before, "no wages paid");
     }
+
+    /// End-to-end: over one full day, citizens work their shifts, sleep at
+    /// night, and buy meals. Locks the sim's daily rhythm against regressions.
+    #[test]
+    fn full_day_cycle_behavior() {
+        let mut w = World::new(99, 40);
+        let mut saw_working = false;
+        let mut saw_sleeping_at_night = false;
+        let money_before: f32 = w.citizens.iter().map(|c| c.money).sum();
+        let mut wages_paid = false;
+
+        for _ in 0..crate::sim::time::TICKS_PER_DAY {
+            w.tick();
+            let hour = w.hour();
+            for c in &w.citizens {
+                match c.state {
+                    CitizenState::Performing { activity: Activity::Work, .. } => {
+                        saw_working = true;
+                    }
+                    CitizenState::Performing { activity: Activity::Sleep, .. } => {
+                        if hour >= 22 || hour < 6 {
+                            saw_sleeping_at_night = true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let money_after: f32 = w.citizens.iter().map(|c| c.money).sum();
+        if money_after != money_before {
+            wages_paid = true;
+        }
+        assert!(saw_working, "nobody worked all day");
+        assert!(saw_sleeping_at_night, "nobody slept at night");
+        assert!(wages_paid, "economy never moved any money");
+        let total_stock: f32 = w
+            .city
+            .buildings
+            .iter()
+            .filter(|b| b.kind.is_food())
+            .map(|b| b.stock)
+            .sum();
+        assert!(total_stock > 0.0, "city ran completely out of food");
+    }
 }
