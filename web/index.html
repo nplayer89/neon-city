@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NEON CITY // 2161</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #05070f; overflow: hidden; }
+    #glcanvas { width: 100vw; height: 100vh; display: block; outline: none; }
+    #loading {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; color: #35e0ff;
+      font-family: ui-monospace, monospace; letter-spacing: 0.4em; pointer-events: none;
+      text-shadow: 0 0 18px #35e0ff;
+    }
+    #loading small { color: #ff3df0; letter-spacing: 0.2em; margin-top: 1em; text-shadow: 0 0 14px #ff3df0; }
+  </style>
+</head>
+<body>
+  <div id="loading"><div>NEON CITY</div><small>establishing uplink…</small></div>
+  <canvas id="glcanvas" tabindex="1"></canvas>
+  <script src="mq_js_bundle.js"></script>
+  <script>
+    load("neon_city.wasm");
+    // The bundle's load() returns undefined; it assigns the global
+    // `wasm_exports` once the app is instantiated. Poll that instead of
+    // guessing with a fixed timer, with a long fallback for safety.
+    const hide = () => { const el = document.getElementById("loading"); if (el) el.remove(); };
+    const poll = setInterval(() => {
+      if (typeof wasm_exports !== "undefined" && wasm_exports) { clearInterval(poll); hide(); }
+    }, 100);
+    setTimeout(() => { clearInterval(poll); hide(); }, 15000);
+  </script>
+</body>
+</html>

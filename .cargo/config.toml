@@ -1,0 +1,5 @@
+[target.wasm32-unknown-unknown]
+# --allow-undefined: miniquad's GL/input/audio externs have no Rust/C
+# definition — mq_js_bundle.js supplies them at runtime via importObject.
+# Target-scoped, so native builds are unaffected.
+rustflags = ["-C", "link-arg=--allow-undefined"]
