@@ -61,7 +61,13 @@ mod tests {
     fn roster_order_is_alphabetical_and_complete() {
         let world = crate::sim::world::World::new(2161, 48);
         let r = Roster::new(&world);
-        assert_eq!(r.order.len(), world.citizens.len());
+        let mut ids = r.order.clone();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            (0..world.citizens.len()).collect::<Vec<_>>(),
+            "order is not a permutation of citizen ids"
+        );
         for pair in r.order.windows(2) {
             assert!(
                 world.citizens[pair[0]].name <= world.citizens[pair[1]].name,
