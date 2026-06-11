@@ -3,6 +3,7 @@ use crate::sim::event::{EventKind, SimEvent};
 use crate::sim::time::{self, TICKS_PER_HOUR};
 use crate::sim::world::World;
 use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
+use crate::ui::roster::draw_clipped_text;
 use crate::ui::inspector::Selection;
 use macroquad::prelude::*;
 use std::collections::VecDeque;
@@ -28,6 +29,9 @@ pub struct Ticker {
 pub fn format_event(world: &World, ev: &SimEvent) -> (String, Selection) {
     let mins = (ev.tick % TICKS_PER_HOUR) * 60 / TICKS_PER_HOUR;
     let stamp = format!("D{} {:02}:{:02}", time::day(ev.tick), time::hour(ev.tick), mins);
+    // Phase 1: citizens and buildings are never removed, so direct indexing is
+    // safe. Phase 4 (citizen mortality) must drain stale events before despawn
+    // or these lookups need bounds checks.
     match ev.kind {
         EventKind::VenueSoldOut { building } => (
             format!(
@@ -95,19 +99,21 @@ impl Ticker {
         let y = screen_height() - 36.0 - h;
         draw_rectangle(TICKER_X, y, TICKER_W, h, PANEL);
         draw_rectangle_lines(TICKER_X, y, TICKER_W, h, 1.0, PANEL_EDGE);
+        if over(TICKER_X, y, TICKER_W, h) {
+            hud.pointer_over_ui = true;
+        }
+        let (mx, my) = mouse_position();
         let mut clicked = None;
         for (i, e) in self.entries.iter().enumerate() {
             let ry = y + i as f32 * ROW_H;
-            if over(TICKER_X, ry, TICKER_W, ROW_H) {
-                hud.pointer_over_ui = true;
-                if e.target != Selection::None {
-                    draw_rectangle(TICKER_X, ry, TICKER_W, ROW_H, Color::new(0.1, 0.2, 0.32, 0.6));
-                    if is_mouse_button_pressed(MouseButton::Left) {
-                        clicked = Some(e.target);
-                    }
+            let row_hit = mx >= TICKER_X && mx <= TICKER_X + TICKER_W && my >= ry && my < ry + ROW_H;
+            if row_hit && e.target != Selection::None {
+                draw_rectangle(TICKER_X, ry, TICKER_W, ROW_H, Color::new(0.1, 0.2, 0.32, 0.6));
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    clicked = Some(e.target);
                 }
             }
-            draw_text(&e.text, TICKER_X + 10.0, ry + 15.0, 16.0, e.color);
+            draw_clipped_text(&e.text, TICKER_X + 10.0, ry + 15.0, 16, TICKER_W - 20.0, e.color);
         }
         clicked
     }
@@ -147,5 +153,17 @@ mod tests {
         assert!(text.contains("1240"), "{text}");
         assert!(text.contains("Day 1"), "{text}");
         assert_eq!(target, Selection::None);
+    }
+
+    #[test]
+    fn cant_afford_line_names_both_and_targets_citizen() {
+        let w = World::new(3, 4);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap();
+        let ev = SimEvent { tick: 30, kind: EventKind::CantAffordMeal { citizen: 1, building: venue.id } };
+        let (text, target) = format_event(&w, &ev);
+        assert!(text.contains(&w.citizens[1].name), "{text}");
+        assert!(text.contains("can't afford"), "{text}");
+        assert!(text.contains(venue.kind.name()), "{text}");
+        assert_eq!(target, Selection::Citizen(1));
     }
 }

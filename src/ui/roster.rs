@@ -65,7 +65,7 @@ fn band_color(b: Band) -> Color {
 }
 
 /// Draws text clipped to `max_w` so long names never run under the icons.
-fn draw_clipped_text(text: &str, x: f32, y: f32, font_px: u16, max_w: f32, color: Color) {
+pub(crate) fn draw_clipped_text(text: &str, x: f32, y: f32, font_px: u16, max_w: f32, color: Color) {
     if measure_text(text, None, font_px, 1.0).width <= max_w {
         draw_text(text, x, y, font_px as f32, color);
         return;
