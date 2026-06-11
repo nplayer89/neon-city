@@ -6,7 +6,7 @@ use crate::ui::camera::Camera;
 use crate::ui::hud::{button, over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Selection {
     None,
     Citizen(usize),
