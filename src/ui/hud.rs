@@ -58,8 +58,8 @@ pub fn draw_hud(world: &World, hud: &mut HudState) {
     draw_text("NEON CITY", 18.0, 33.0, 30.0, CYAN);
     draw_text("// 2161", 168.0, 33.0, 20.0, Color::new(1.0, 0.3, 0.85, 0.9));
 
-    let h = world.hour_f();
-    let clock = format!("DAY {}  {:02}:{:02}", world.day(), h as u32, ((h % 1.0) * 60.0) as u32);
+    let mins = (world.tick % crate::sim::time::TICKS_PER_HOUR) * 60 / crate::sim::time::TICKS_PER_HOUR;
+    let clock = format!("DAY {}  {:02}:{:02}", world.day(), world.hour(), mins);
     draw_text(&clock, 290.0, 33.0, 24.0, WHITE);
 
     // speed buttons

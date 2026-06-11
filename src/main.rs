@@ -41,6 +41,7 @@ async fn main() {
         if steps == 240 {
             acc = 0.0;
         }
+        // Visual traffic is capped at 4x so vehicles don't teleport at 16x sim speed.
         let traffic_dt = if hud.paused { 0.0 } else { get_frame_time() * hud.speed.min(4) as f32 };
         traffic.update(traffic_dt, sim::city::CITY_W, sim::city::CITY_H);
 
