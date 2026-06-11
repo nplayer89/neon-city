@@ -18,7 +18,7 @@ impl HudState {
     }
 }
 
-fn over(x: f32, y: f32, w: f32, h: f32) -> bool {
+pub fn over(x: f32, y: f32, w: f32, h: f32) -> bool {
     let (mx, my) = mouse_position();
     mx >= x && mx <= x + w && my >= y && my <= y + h
 }

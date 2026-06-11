@@ -3,7 +3,7 @@ use crate::sim::citizen::{CitizenState, NEED_KINDS};
 use crate::sim::city::Tile;
 use crate::sim::world::World;
 use crate::ui::camera::Camera;
-use crate::ui::hud::{button, HudState, CYAN, PANEL, PANEL_EDGE};
+use crate::ui::hud::{button, over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -71,7 +71,7 @@ impl Inspector {
 
     fn draw_citizen_panel(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, id: usize) {
         let (x, y, w, h) = self.panel_rect();
-        if mouse_position().0 >= x && mouse_position().1 <= y + h {
+        if over(x, y, w, h) {
             hud.pointer_over_ui = true;
         }
         draw_rectangle(x, y, w, h, PANEL);
@@ -150,7 +150,7 @@ impl Inspector {
     fn draw_building_panel(&mut self, world: &World, hud: &mut HudState, id: u16) {
         let b = &world.city.buildings[id as usize];
         let (x, y, w, h) = self.panel_rect();
-        if mouse_position().0 >= x && mouse_position().1 <= y + h {
+        if over(x, y, w, h) {
             hud.pointer_over_ui = true;
         }
         draw_rectangle(x, y, w, h, PANEL);
