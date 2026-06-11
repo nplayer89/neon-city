@@ -2,9 +2,10 @@ use crate::sim::ai;
 use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind};
 use crate::sim::city::{BuildingKind, City};
 use crate::sim::economy;
+use crate::sim::event::{push_event, EventKind, SimEvent};
 use crate::sim::path;
 use crate::sim::rng::Rng;
-use crate::sim::time::{self, TICKS_PER_HOUR};
+use crate::sim::time::{self, TICKS_PER_DAY, TICKS_PER_HOUR};
 use std::collections::VecDeque;
 
 pub struct World {
@@ -13,6 +14,10 @@ pub struct World {
     pub citizens: Vec<Citizen>,
     pub tick: u64,
     pub seed: u64,
+    /// Events since the last drain (capped; see event::MAX_PENDING).
+    pub events: VecDeque<SimEvent>,
+    /// Wages paid since the last midnight rollover.
+    wages_today: f32,
 }
 
 const SHIFTS: [(u32, u32); 3] = [(8, 16), (16, 24), (0, 8)];
@@ -23,7 +28,7 @@ impl World {
     pub fn new(seed: u64, n_citizens: usize) -> World {
         let mut rng = Rng::new(seed);
         let city = City::generate(&mut rng);
-        let mut world = World { rng, city, citizens: vec![], tick: 0, seed };
+        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0 };
 
         let homes: Vec<u16> = world
             .city
@@ -84,10 +89,23 @@ impl World {
         }
         let city = &mut self.city;
         let rng = &mut self.rng;
+        let events = &mut self.events;
+        let mut wages = 0.0;
         for c in self.citizens.iter_mut() {
             c.decay_needs();
-            tick_citizen(c, city, rng, tick, hour, night);
+            wages += tick_citizen(c, city, rng, tick, hour, night, events);
         }
+        self.wages_today += wages;
+        if self.tick % TICKS_PER_DAY == 0 {
+            let summary = EventKind::DailyWages { day: time::day(self.tick) - 1, total: self.wages_today };
+            push_event(&mut self.events, SimEvent { tick: self.tick, kind: summary });
+            self.wages_today = 0.0;
+        }
+    }
+
+    /// Hand pending events to the UI (or tests); empties the queue.
+    pub fn drain_events(&mut self) -> Vec<SimEvent> {
+        self.events.drain(..).collect()
     }
 
     /// FNV-style digest of mutable sim state, for determinism tests.
@@ -119,11 +137,13 @@ fn tick_citizen(
     tick: u64,
     hour: u32,
     night: bool,
-) {
+    events: &mut VecDeque<SimEvent>,
+) -> f32 {
+    let mut wages = 0.0;
     match c.state {
         CitizenState::Idle { until } => {
             if tick < until {
-                return;
+                return wages;
             }
             if let Some((b, act)) = ai::choose_action(c, city, hour, night) {
                 start_travel(c, city, Some(b), act, tick, rng);
@@ -151,7 +171,7 @@ fn tick_citizen(
             }
             if c.path.is_empty() {
                 match to {
-                    Some(b) => arrive(c, city, b, activity, tick),
+                    Some(b) => arrive(c, city, b, activity, tick, events),
                     None => c.state = CitizenState::Idle { until: tick + rng.gen_range(60, 240) as u64 },
                 }
             }
@@ -177,7 +197,9 @@ fn tick_citizen(
                 }
                 Activity::Work => {
                     if let Some(job) = &c.job {
-                        c.money += job.wage_per_hour / TICKS_PER_HOUR as f32;
+                        let pay = job.wage_per_hour / TICKS_PER_HOUR as f32;
+                        c.money += pay;
+                        wages = pay;
                         !job.in_shift(hour) || c.needs.min_value() < 0.08
                     } else {
                         true
@@ -193,6 +215,7 @@ fn tick_citizen(
             }
         }
     }
+    wages
 }
 
 fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, tick: u64, rng: &mut Rng) {
@@ -213,7 +236,7 @@ fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, ti
     }
 }
 
-fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64) {
+fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, _events: &mut VecDeque<SimEvent>) {
     let building = &mut city.buildings[b as usize];
     match act {
         Activity::Eat => {
@@ -243,6 +266,7 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64) {
 mod tests {
     use super::*;
     use crate::sim::citizen::{Activity, CitizenState, Needs};
+    use crate::sim::event::EventKind;
     use crate::sim::time::TICKS_PER_HOUR;
 
     #[test]
@@ -304,6 +328,25 @@ mod tests {
             w.tick();
         }
         assert!(w.citizens[0].money > before, "no wages paid");
+    }
+
+    #[test]
+    fn daily_wage_summary_emitted_at_midnight() {
+        let mut w = World::new(99, 40);
+        let mut summaries = vec![];
+        for _ in 0..crate::sim::time::TICKS_PER_DAY {
+            w.tick();
+            for ev in w.drain_events() {
+                if let EventKind::DailyWages { day, total } = ev.kind {
+                    summaries.push((day, total, ev.tick));
+                }
+            }
+        }
+        assert_eq!(summaries.len(), 1, "expected exactly one daily summary");
+        let (day, total, tick) = summaries[0];
+        assert_eq!(day, 1);
+        assert!(total > 0.0, "no wages accumulated");
+        assert_eq!(tick, crate::sim::time::TICKS_PER_DAY);
     }
 
     /// End-to-end: over one full day, citizens work their shifts, sleep at
