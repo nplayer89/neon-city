@@ -6,6 +6,8 @@ pub struct Rng {
 
 impl Rng {
     pub fn new(seed: u64) -> Self {
+        // Non-canonical seeding: seed acts as both initstate and initseq.
+        // Outputs will not match the pcg-random.org reference for the same seed.
         let mut r = Rng { state: 0, inc: (seed << 1) | 1 };
         r.state = seed.wrapping_add(0x853c49e6748fea9b);
         r.next_u32();
@@ -29,13 +31,17 @@ impl Rng {
 
     /// Uniform i32 in [lo, hi). Requires lo < hi.
     pub fn gen_range(&mut self, lo: i32, hi: i32) -> i32 {
-        lo + (self.next_u32() % (hi - lo) as u32) as i32
+        debug_assert!(lo < hi, "gen_range: lo ({lo}) must be < hi ({hi})");
+        let range = (hi as i64 - lo as i64) as u64;
+        (lo as i64 + (self.next_u32() as u64 % range) as i64) as i32
     }
 
+    /// Uniform f32 in [lo, hi).
     pub fn gen_f32_range(&mut self, lo: f32, hi: f32) -> f32 {
         lo + self.gen_f32() * (hi - lo)
     }
 
+    /// True with probability p.
     pub fn chance(&mut self, p: f32) -> bool {
         self.gen_f32() < p
     }
@@ -86,5 +92,12 @@ mod tests {
             let v = r.gen_f32();
             assert!((0.0..1.0).contains(&v));
         }
+    }
+
+    #[test]
+    fn known_output_vector() {
+        let mut r = Rng::new(42);
+        let v = r.next_u32();
+        assert_eq!(v, 3053151217);
     }
 }
