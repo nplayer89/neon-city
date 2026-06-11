@@ -47,6 +47,15 @@ pub fn money_band(balance: f32) -> Band {
     }
 }
 
+/// Compact wallet label, bounded to 5 chars so it always fits MONEY_COL_W.
+pub fn money_label(balance: f32) -> String {
+    if balance >= 1000.0 {
+        format!("₢{:.0}k", (balance / 1000.0).floor())
+    } else {
+        format!("₢{:.0}", balance)
+    }
+}
+
 fn band_color(b: Band) -> Color {
     match b {
         Band::High => Color::new(0.3, 0.95, 0.5, 1.0),
@@ -128,7 +137,7 @@ impl Roster {
             }
             let c = &world.citizens[id];
             draw_clipped_text(&c.name, x + 10.0, ry + 11.5, 15, name_max_w, Color::new(0.8, 0.9, 1.0, 0.9));
-            let money_text = format!("₢{:.0}", c.money);
+            let money_text = money_label(c.money);
             let mw = measure_text(&money_text, None, 13, 1.0).width;
             draw_text(&money_text, icons_x - 4.0 - mw, ry + 11.5, 13.0, band_color(money_band(c.money)));
             for (j, k) in NEED_KINDS.iter().enumerate() {
@@ -164,6 +173,16 @@ mod tests {
         assert_eq!(money_band(39.9), Band::Medium);
         assert_eq!(money_band(40.0), Band::High);
         assert_eq!(money_band(500.0), Band::High);
+    }
+
+    #[test]
+    fn money_label_compacts_large_balances() {
+        assert_eq!(money_label(0.0), "₢0");
+        assert_eq!(money_label(47.4), "₢47");
+        assert_eq!(money_label(999.0), "₢999");
+        assert_eq!(money_label(1000.0), "₢1k");
+        assert_eq!(money_label(12_345.0), "₢12k");
+        assert_eq!(money_label(999_999.0), "₢999k");
     }
 
     #[test]
