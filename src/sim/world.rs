@@ -245,6 +245,8 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
     let building = &mut city.buildings[b as usize];
     match act {
         Activity::Eat => {
+            // Stock ran out mid-walk; stay silent — VenueSoldOut already fired
+            // when the last meal sold.
             if building.stock < 1.0 {
                 c.state = CitizenState::Idle { until: tick + 60 };
                 return;
@@ -426,6 +428,7 @@ mod tests {
         w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
 
         let mut sold_out = 0;
+        // 200 ticks < TICKS_PER_HOUR (600), so no hourly restock can interfere.
         for _ in 0..200 {
             w.tick();
             for ev in w.drain_events() {
