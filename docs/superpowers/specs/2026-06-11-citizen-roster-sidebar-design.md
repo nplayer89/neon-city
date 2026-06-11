@@ -38,8 +38,11 @@ wiring, consistent with the one-concern-per-module pattern in `src/ui/`
 - Sidebar anchored at the left edge: `x = 0`, from below the top bar
   (`y = 52`) down to just above the bottom population strip
   (`height = screen_height() − 52 − 32`), width **200 px**, drawn in the
-  existing `PANEL` fill with `PANEL_EDGE` border.
-- One row per citizen, **16 px** tall: name (font 15) left-aligned, four
+  existing `PANEL` fill with `PANEL_EDGE` border, with a 28 px "CITIZENS"
+  header at the top.
+- One row per citizen, **15 px** tall (48 rows × 15 px = 720 px fits in the
+  748 px list area at the default 860 px window height; 16 px would not):
+  name (font 15) left-aligned, four
   **7 px** squares right-aligned with 4 px gaps, one per need in `NEED_KINDS`
   order (hunger, energy, hygiene, fun).
 - The hovered row gets a subtle highlight rectangle so the hover target is
