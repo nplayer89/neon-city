@@ -3,7 +3,7 @@ use crate::sim::world::World;
 use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
 
-const SIDEBAR_W: f32 = 200.0;
+const SIDEBAR_W: f32 = 240.0;
 /// Below the 52 px top bar.
 const TOP: f32 = 52.0;
 /// Stops above the bottom-left population strip.
@@ -13,6 +13,8 @@ const ROW_H: f32 = 15.0;
 /// 4 icons, 7 px each on an 11 px stride, right-aligned 6 px from the trailing gap.
 const ICON_STRIDE: f32 = 11.0;
 const ICON_SIZE: f32 = 7.0;
+/// Reserved width for the right-aligned wallet readout, left of the icons.
+const MONEY_COL_W: f32 = 44.0;
 
 /// Discrete status band for a need value in [0, 1].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -107,7 +109,7 @@ impl Roster {
 
         let (_, my) = mouse_position();
         let icons_x = x + w - 6.0 - NEED_KINDS.len() as f32 * ICON_STRIDE;
-        let name_max_w = icons_x - (x + 10.0) - 4.0;
+        let name_max_w = icons_x - MONEY_COL_W - (x + 10.0) - 4.0;
         let mut hovered: Option<usize> = None;
 
         // No row hover while a left-drag is in progress (map pans sweeping
@@ -126,6 +128,9 @@ impl Roster {
             }
             let c = &world.citizens[id];
             draw_clipped_text(&c.name, x + 10.0, ry + 11.5, 15, name_max_w, Color::new(0.8, 0.9, 1.0, 0.9));
+            let money_text = format!("₢{:.0}", c.money);
+            let mw = measure_text(&money_text, None, 13, 1.0).width;
+            draw_text(&money_text, icons_x - 4.0 - mw, ry + 11.5, 13.0, band_color(money_band(c.money)));
             for (j, k) in NEED_KINDS.iter().enumerate() {
                 let color = band_color(band(c.needs.get(*k)));
                 draw_rectangle(icons_x + j as f32 * ICON_STRIDE, ry + 4.0, ICON_SIZE, ICON_SIZE, color);
