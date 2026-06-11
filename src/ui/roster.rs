@@ -10,7 +10,7 @@ const TOP: f32 = 52.0;
 const BOTTOM_MARGIN: f32 = 32.0;
 const HEADER_H: f32 = 28.0;
 const ROW_H: f32 = 15.0;
-/// 4 icons, 7 px each with 4 px gaps, 6 px right padding.
+/// 4 icons, 7 px each on an 11 px stride, right-aligned 6 px from the trailing gap.
 const ICON_STRIDE: f32 = 11.0;
 const ICON_SIZE: f32 = 7.0;
 
@@ -101,7 +101,7 @@ impl Roster {
         for (i, &id) in self.order.iter().enumerate() {
             let ry = list_top + i as f32 * ROW_H - self.scroll;
             // Partially clipped rows are skipped (no scissor in macroquad 2D).
-            if ry < list_top || ry + ROW_H > y + h {
+            if ry < list_top || ry + ROW_H > y + h + 0.5 {
                 continue;
             }
             if hovering_panel && my >= ry && my < ry + ROW_H {
