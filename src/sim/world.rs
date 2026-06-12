@@ -87,7 +87,7 @@ impl World {
         self.tick += 1;
         let (tick, hour, night) = (self.tick, self.hour(), time::is_night(self.tick));
         if self.tick % TICKS_PER_HOUR == 0 {
-            economy::produce_food(&mut self.city, hour);
+            economy::distribute_food(&mut self.city, hour);
         }
         let city = &mut self.city;
         let rng = &mut self.rng;
