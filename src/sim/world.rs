@@ -54,8 +54,9 @@ impl World {
             let mut c = Citizen::spawn(&mut world.rng, i, home, pos, &mut used_names);
             // ~80% employed
             if world.rng.chance(0.8) {
-                // Round-robin, but skip farms already at capacity — surplus
-                // shifts to industry, whose minted wages absorb anyone.
+                // Round-robin, but skip farms already at capacity. Spill lands
+                // on the next workplace in id order — fine while its wages are
+                // minted (industry); revisit if spill targets gain real books.
                 let mut idx = i % workplaces.len();
                 for _ in 0..workplaces.len() {
                     let b = &world.city.buildings[workplaces[idx] as usize];
@@ -134,6 +135,14 @@ impl World {
         self.events.drain(..).collect()
     }
 
+    /// Σ wallets + Σ building balances. Conserved up to `minted` — see the
+    /// conservation soak test.
+    #[cfg(test)]
+    pub fn total_money(&self) -> f32 {
+        self.citizens.iter().map(|c| c.money).sum::<f32>()
+            + self.city.buildings.iter().map(|b| b.balance).sum::<f32>()
+    }
+
     /// FNV-style digest of mutable sim state, for determinism tests.
     #[cfg(test)]
     pub fn fingerprint(&self) -> u64 {
@@ -150,8 +159,10 @@ impl World {
         }
         for b in &self.city.buildings {
             h = mix(h, b.stock.to_bits() as u64);
+            h = mix(h, b.balance.to_bits() as u64);
             h = mix(h, b.occupants.len() as u64);
         }
+        h = mix(h, self.minted.to_bits() as u64);
         h
     }
 }
@@ -796,5 +807,55 @@ mod tests {
             matches!(w.citizens[0].state, CitizenState::Idle { .. }),
             "worker should have left after the shift-end settlement"
         );
+    }
+
+    /// Phase 2 exit criterion: money is conserved end to end. Runs three game
+    /// days at the shipped seed and checks the economy is still alive after.
+    /// (Slow in debug — roughly 10-30s; it earns its keep.)
+    #[test]
+    fn three_day_money_conservation_soak() {
+        let mut w = World::new(2161, 48);
+        let initial = w.total_money();
+        for _ in 0..(crate::sim::time::TICKS_PER_DAY * 3) {
+            w.tick();
+        }
+        let drift = (w.total_money() - initial - w.minted).abs();
+        assert!(drift < 0.5, "conservation drift {drift} (minted {})", w.minted);
+        assert!(w.minted > 0.0, "industry never paid wages");
+        let venue_total: f32 =
+            w.city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.balance).sum();
+        assert!(venue_total > 0.0, "every venue is broke");
+        assert!(
+            w.city
+                .buildings
+                .iter()
+                .any(|b| b.kind == BuildingKind::HydroFarm && !b.workers.is_empty() && !b.insolvent),
+            "every farm collapsed"
+        );
+    }
+
+    #[test]
+    fn arcade_payment_credits_venue() {
+        let mut w = World::new(17, 6);
+        let arcade = w
+            .city
+            .buildings
+            .iter()
+            .find(|b| b.kind == BuildingKind::Arcade)
+            .unwrap()
+            .id;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].money = 100.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(arcade), activity: Activity::Fun };
+        let price = crate::sim::economy::fun_price(w.city.buildings[arcade as usize].kind);
+        let balance_before = w.city.buildings[arcade as usize].balance;
+        w.tick();
+        let gained = w.city.buildings[arcade as usize].balance - balance_before;
+        assert!(price > 0.0, "arcade should charge");
+        assert!((gained - price).abs() < 1e-3, "arcade gained {gained}, price {price}");
     }
 }
