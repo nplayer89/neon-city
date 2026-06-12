@@ -89,8 +89,9 @@ pub fn distribute_food(city: &mut City, hour: u32) {
             continue;
         }
         b.stock += take;
-        b.balance -= take * WHOLESALE_PRICE;
-        wholesale_total += take * WHOLESALE_PRICE;
+        let cost = (take * WHOLESALE_PRICE).min(b.balance);
+        b.balance -= cost;
+        wholesale_total += cost;
     }
     let per_farm = wholesale_total / farms.len() as f32;
     for id in farms {
@@ -185,6 +186,12 @@ mod tests {
         let paid = venues_before - venues_after;
         let received = farms_after - farms_before;
         assert!((paid - received).abs() < 1e-3, "leak: paid {paid}, received {received}");
+        let stocked: f32 =
+            city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.stock).sum();
+        assert!(
+            (paid - stocked * WHOLESALE_PRICE).abs() < 1e-3,
+            "paid {paid} != {stocked} meals x wholesale"
+        );
     }
 
     #[test]
