@@ -95,7 +95,7 @@ fn event_color(kind: EventKind) -> Color {
         EventKind::CantAffordMeal { .. } => Color::new(1.0, 0.3, 0.85, 1.0),
         EventKind::DailyWages { .. } => CYAN,
         EventKind::EmployerInsolvent { .. } => Color::new(1.0, 0.55, 0.15, 1.0),
-        EventKind::WorkerQuit { .. } => Color::new(0.95, 0.4, 0.3, 1.0),
+        EventKind::WorkerQuit { .. } => Color::new(1.0, 0.55, 0.45, 1.0),
     }
 }
 
