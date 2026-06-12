@@ -14,6 +14,10 @@ pub enum EventKind {
     CantAffordMeal { citizen: usize, building: u16 },
     /// Total wages paid over the day that just ended.
     DailyWages { day: u64, total: f32 },
+    /// An employer couldn't cover a wage payment (edge-triggered per episode).
+    EmployerInsolvent { building: u16 },
+    /// A worker quit after a full shift of missed pay.
+    WorkerQuit { citizen: usize, building: u16 },
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

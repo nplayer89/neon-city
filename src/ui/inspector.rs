@@ -191,6 +191,10 @@ impl Inspector {
             draw_line_item("PRICE", &format!("${:.0}", crate::sim::economy::meal_price(b.kind)), x, by);
             by += 24.0;
         }
+        if b.kind.has_balance() {
+            draw_line_item("BALANCE", &format!("${:.0}", b.balance), x, by);
+            by += 24.0;
+        }
         if b.kind.is_workplace() {
             draw_line_item("WORKERS", &format!("{}", b.workers.len()), x, by);
             by += 24.0;
