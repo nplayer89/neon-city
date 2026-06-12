@@ -22,7 +22,7 @@ pub struct World {
     /// Money created from nothing since world start (industry payroll —
     /// their revenue is deferred; see the Phase 2 spec). The conservation
     /// invariant is: Σ wallets + Σ balances == initial total + minted.
-    pub minted: f32,
+    minted: f32,
 }
 
 const SHIFTS: [(u32, u32); 3] = [(8, 16), (16, 24), (0, 8)];
@@ -326,7 +326,8 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
                 return;
             }
             let price = economy::meal_price(building.kind);
-            // Latent until money can drain mid-walk (Phase 2: rent/bills): the AI
+            // Latent until money can drain mid-walk (later phase: rent/bills —
+            // see the roadmap's deferred list): the AI
             // pre-filters unaffordable venues and nothing spends while Traveling.
             if c.money < price {
                 push_event(events, SimEvent { tick, kind: EventKind::CantAffordMeal { citizen: c.id, building: b } });
