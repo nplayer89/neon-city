@@ -19,6 +19,10 @@ pub struct World {
     events: VecDeque<SimEvent>,
     /// Wages paid since the last midnight rollover.
     wages_today: f32,
+    /// Money created from nothing since world start (industry payroll —
+    /// their revenue is deferred; see the Phase 2 spec). The conservation
+    /// invariant is: Σ wallets + Σ balances == initial total + minted.
+    pub minted: f32,
 }
 
 const SHIFTS: [(u32, u32); 3] = [(8, 16), (16, 24), (0, 8)];
@@ -29,7 +33,7 @@ impl World {
     pub fn new(seed: u64, n_citizens: usize) -> World {
         let mut rng = Rng::new(seed);
         let city = City::generate(&mut rng);
-        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0 };
+        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0, minted: 0.0 };
 
         let homes: Vec<u16> = world
             .city
@@ -64,6 +68,7 @@ impl World {
                     shift_start: shift.0,
                     shift_end: shift.1,
                     wage_per_hour: world.rng.gen_f32_range(11.0, 18.0),
+                    unpaid_hours: 0,
                 });
                 world.city.buildings[wp as usize].workers.push(i);
             }
@@ -100,7 +105,9 @@ impl World {
                     push_event(events, SimEvent { tick, kind: EventKind::CriticalNeed { citizen: c.id, need: k } });
                 }
             }
-            self.wages_today += tick_citizen(c, city, rng, tick, hour, night, events);
+            let (w, m) = tick_citizen(c, city, rng, tick, hour, night, events);
+            self.wages_today += w;
+            self.minted += m;
         }
         if self.tick % TICKS_PER_DAY == 0 {
             let summary = EventKind::DailyWages { day: time::day(self.tick) - 1, total: self.wages_today };
@@ -136,6 +143,36 @@ impl World {
     }
 }
 
+/// Hourly wage settlement while working. Returns (wages_paid, minted):
+/// farm wages move from the employer balance; industry wages are minted.
+fn settle_wage(
+    c: &mut Citizen,
+    city: &mut City,
+    at: u16,
+    tick: u64,
+    events: &mut VecDeque<SimEvent>,
+) -> (f32, f32) {
+    if tick % TICKS_PER_HOUR != 0 {
+        return (0.0, 0.0);
+    }
+    let Some(job) = c.job.as_mut() else { return (0.0, 0.0) };
+    let wage = job.wage_per_hour;
+    let employer = &mut city.buildings[at as usize];
+    if !employer.kind.wages_from_balance() {
+        c.money += wage;
+        return (wage, wage);
+    }
+    if employer.balance >= wage {
+        employer.balance -= wage;
+        c.money += wage;
+        job.unpaid_hours = 0;
+        employer.insolvent = false;
+        return (wage, 0.0);
+    }
+    let _ = events; // consumed by the insolvency cycle below
+    (0.0, 0.0)
+}
+
 fn tick_citizen(
     c: &mut Citizen,
     city: &mut City,
@@ -144,12 +181,13 @@ fn tick_citizen(
     hour: u32,
     night: bool,
     events: &mut VecDeque<SimEvent>,
-) -> f32 {
+) -> (f32, f32) {
     let mut wages = 0.0;
+    let mut minted = 0.0;
     match c.state {
         CitizenState::Idle { until } => {
             if tick < until {
-                return wages;
+                return (wages, minted);
             }
             if let Some((b, act)) = ai::choose_action(c, city, hour, night) {
                 start_travel(c, city, Some(b), act, tick, rng);
@@ -202,13 +240,12 @@ fn tick_citizen(
                     c.needs.fun >= 0.97
                 }
                 Activity::Work => {
-                    if let Some(job) = &c.job {
-                        let pay = job.wage_per_hour / TICKS_PER_HOUR as f32;
-                        c.money += pay;
-                        wages = pay;
-                        !job.in_shift(hour) || c.needs.min_value() < 0.08
-                    } else {
-                        true
+                    let (w, m) = settle_wage(c, city, at, tick, events);
+                    wages = w;
+                    minted = m;
+                    match &c.job {
+                        Some(job) => !job.in_shift(hour) || c.needs.min_value() < 0.08,
+                        None => true,
                     }
                 }
                 Activity::Stroll => true,
@@ -221,7 +258,7 @@ fn tick_citizen(
             }
         }
     }
-    wages
+    (wages, minted)
 }
 
 fn start_travel(c: &mut Citizen, city: &City, to: Option<u16>, act: Activity, tick: u64, rng: &mut Rng) {
@@ -353,6 +390,7 @@ mod tests {
             shift_start: 0,
             shift_end: 24,
             wage_per_hour: 14.0,
+            unpaid_hours: 0,
         });
         w.citizens[0].needs = Needs::full();
         let before = w.citizens[0].money;
@@ -518,5 +556,71 @@ mod tests {
         let gained = w.city.buildings[venue as usize].balance - balance_before;
         assert!((gained - price).abs() < 1e-3, "venue gained {gained}, price {price}");
         assert!((w.citizens[0].money - (100.0 - price)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn farm_wages_come_from_farm_balance() {
+        let mut w = World::new(21, 4);
+        let farm =
+            w.city.buildings.iter().find(|b| b.kind == BuildingKind::HydroFarm).unwrap().id;
+        // Zero venue balances so no wholesale income muddies the farm's books.
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
+            b.balance = 0.0;
+        }
+        w.city.buildings[farm as usize].balance = 500.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].job = Some(Job {
+            workplace: farm,
+            shift_start: 0,
+            shift_end: 24,
+            wage_per_hour: 10.0,
+            unpaid_hours: 0,
+        });
+        w.city.buildings[farm as usize].workers.push(0);
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(farm), activity: Activity::Work };
+        let money_before = w.citizens[0].money;
+        for _ in 0..(TICKS_PER_HOUR * 2) {
+            w.tick();
+        }
+        let earned = w.citizens[0].money - money_before;
+        assert!(earned >= 10.0, "no hourly wage landed: {earned}");
+        assert!(
+            (earned / 10.0).fract().abs() < 1e-4,
+            "wages not in whole-hour chunks: {earned}"
+        );
+        let farm_spent = 500.0 - w.city.buildings[farm as usize].balance;
+        assert!((farm_spent - earned).abs() < 1e-3, "spent {farm_spent} != earned {earned}");
+        assert_eq!(w.minted, 0.0, "farm wages must not mint");
+    }
+
+    #[test]
+    fn industry_wages_are_minted_and_tracked() {
+        let mut w = World::new(21, 4);
+        let dc =
+            w.city.buildings.iter().find(|b| b.kind == BuildingKind::DataCenter).unwrap().id;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].job = Some(Job {
+            workplace: dc,
+            shift_start: 0,
+            shift_end: 24,
+            wage_per_hour: 14.0,
+            unpaid_hours: 0,
+        });
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(dc), activity: Activity::Work };
+        let money_before = w.citizens[0].money;
+        for _ in 0..(TICKS_PER_HOUR * 2) {
+            w.tick();
+        }
+        let earned = w.citizens[0].money - money_before;
+        assert!(earned >= 14.0, "no wage landed: {earned}");
+        assert!((w.minted - earned).abs() < 1e-3, "minted {} != earned {earned}", w.minted);
     }
 }

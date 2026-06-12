@@ -145,7 +145,7 @@ mod tests {
     fn employed_citizen_works_during_shift() {
         let (city, mut c) = setup();
         let wp = city.buildings.iter().find(|b| b.kind.is_workplace()).unwrap();
-        c.job = Some(Job { workplace: wp.id, shift_start: 8, shift_end: 16, wage_per_hour: 14.0 });
+        c.job = Some(Job { workplace: wp.id, shift_start: 8, shift_end: 16, wage_per_hour: 14.0, unpaid_hours: 0 });
         let (b, act) = choose_action(&c, &city, 10, false).expect("action");
         assert_eq!(act, Activity::Work);
         assert_eq!(b, wp.id);
@@ -155,7 +155,7 @@ mod tests {
     fn critical_need_overrides_work() {
         let (city, mut c) = setup();
         let wp = city.buildings.iter().find(|b| b.kind.is_workplace()).unwrap();
-        c.job = Some(Job { workplace: wp.id, shift_start: 8, shift_end: 16, wage_per_hour: 14.0 });
+        c.job = Some(Job { workplace: wp.id, shift_start: 8, shift_end: 16, wage_per_hour: 14.0, unpaid_hours: 0 });
         c.needs.hunger = 0.05;
         c.money = 100.0;
         let (_, act) = choose_action(&c, &city, 10, false).expect("action");

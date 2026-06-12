@@ -100,6 +100,9 @@ pub struct Job {
     pub shift_start: u32,
     pub shift_end: u32,
     pub wage_per_hour: f32,
+    /// Hours worked without pay (employer broke). Resets on any paid hour;
+    /// at economy::UNPAID_HOURS_TO_QUIT the worker quits.
+    pub unpaid_hours: u32,
 }
 
 impl Job {
