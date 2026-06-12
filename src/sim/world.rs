@@ -169,7 +169,16 @@ fn settle_wage(
         employer.insolvent = false;
         return (wage, 0.0);
     }
-    let _ = events; // consumed by the insolvency cycle below
+    job.unpaid_hours += 1;
+    if !employer.insolvent {
+        employer.insolvent = true;
+        push_event(events, SimEvent { tick, kind: EventKind::EmployerInsolvent { building: at } });
+    }
+    if job.unpaid_hours >= economy::UNPAID_HOURS_TO_QUIT {
+        push_event(events, SimEvent { tick, kind: EventKind::WorkerQuit { citizen: c.id, building: at } });
+        employer.workers.retain(|&id| id != c.id);
+        c.job = None;
+    }
     (0.0, 0.0)
 }
 
@@ -622,5 +631,99 @@ mod tests {
         let earned = w.citizens[0].money - money_before;
         assert!(earned >= 14.0, "no wage landed: {earned}");
         assert!((w.minted - earned).abs() < 1e-3, "minted {} != earned {earned}", w.minted);
+    }
+
+    #[test]
+    fn missed_payroll_fires_insolvency_once_then_quit_after_full_shift() {
+        let mut w = World::new(21, 4);
+        let farm =
+            w.city.buildings.iter().find(|b| b.kind == BuildingKind::HydroFarm).unwrap().id;
+        // No wholesale income for the farm: venues need balance to restock, and
+        // zero stock means no meal sales can ever recapitalize them.
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
+            b.balance = 0.0;
+            b.stock = 0.0;
+        }
+        w.city.buildings[farm as usize].balance = 0.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].job = Some(Job {
+            workplace: farm,
+            shift_start: 0,
+            shift_end: 24,
+            wage_per_hour: 10.0,
+            unpaid_hours: 0,
+        });
+        w.city.buildings[farm as usize].workers.push(0);
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(farm), activity: Activity::Work };
+
+        let mut insolvent_events = 0;
+        let mut quit_events = 0;
+        for _ in 0..(TICKS_PER_HOUR * 9) {
+            w.tick();
+            for ev in w.drain_events() {
+                match ev.kind {
+                    EventKind::EmployerInsolvent { building } if building == farm => {
+                        insolvent_events += 1
+                    }
+                    EventKind::WorkerQuit { citizen: 0, building } if building == farm => {
+                        quit_events += 1
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert_eq!(insolvent_events, 1, "insolvency must edge-trigger once");
+        assert_eq!(quit_events, 1, "expected exactly one quit");
+        assert!(w.citizens[0].job.is_none(), "job not cleared");
+        assert!(
+            !w.city.buildings[farm as usize].workers.contains(&0),
+            "still on the workers list"
+        );
+    }
+
+    #[test]
+    fn payment_resets_unpaid_count_and_insolvency_flag() {
+        let mut w = World::new(21, 4);
+        let farm =
+            w.city.buildings.iter().find(|b| b.kind == BuildingKind::HydroFarm).unwrap().id;
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
+            b.balance = 0.0;
+        }
+        w.city.buildings[farm as usize].balance = 0.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].job = Some(Job {
+            workplace: farm,
+            shift_start: 0,
+            shift_end: 24,
+            wage_per_hour: 10.0,
+            unpaid_hours: 0,
+        });
+        w.city.buildings[farm as usize].workers.push(0);
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(farm), activity: Activity::Work };
+
+        for _ in 0..(TICKS_PER_HOUR * 3) {
+            w.tick();
+        }
+        assert!(w.citizens[0].job.unwrap().unpaid_hours >= 2, "no missed hours recorded");
+        assert!(w.city.buildings[farm as usize].insolvent, "flag not set");
+
+        w.city.buildings[farm as usize].balance = 500.0;
+        for _ in 0..=TICKS_PER_HOUR {
+            w.tick();
+        }
+        assert_eq!(
+            w.citizens[0].job.unwrap().unpaid_hours,
+            0,
+            "paid hour must reset the counter"
+        );
+        assert!(!w.city.buildings[farm as usize].insolvent, "flag must clear on payment");
     }
 }
