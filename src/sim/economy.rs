@@ -3,8 +3,8 @@ use crate::sim::time::TICKS_PER_HOUR;
 
 pub fn meal_price(kind: BuildingKind) -> f32 {
     match kind {
-        BuildingKind::NoodleBar => 12.0,
-        BuildingKind::VendingPlaza => 5.0,
+        BuildingKind::NoodleBar => 15.0,
+        BuildingKind::VendingPlaza => 10.0,
         _ => 0.0,
     }
 }
@@ -39,6 +39,21 @@ pub const SHOWER_RATE: f32 = 1.0 / (0.4 * TICKS_PER_HOUR as f32);
 pub const STOCK_CAP: f32 = 60.0;
 /// Meals produced per hydro farm per production hour (06:00–22:00).
 pub const FARM_OUTPUT_PER_HOUR: f32 = 6.0;
+/// Farms charge venues this per meal at distribution time.
+pub const WHOLESALE_PRICE: f32 = 7.0;
+/// Cap on farmhands per farm; keeps farm payroll under wholesale income
+/// (~72 meals/day x $7 ≈ $504 vs 6 farmhands x ~$10/h x 8h ≈ $480).
+pub const FARM_MAX_WORKERS: usize = 3;
+/// A full shift of missed pay makes a worker quit.
+pub const UNPAID_HOURS_TO_QUIT: u32 = 8;
+
+/// Hourly wage range (lo, hi) for jobs at this building kind.
+pub fn wage_range(kind: BuildingKind) -> (f32, f32) {
+    match kind {
+        BuildingKind::HydroFarm => (9.0, 11.0),
+        _ => (11.0, 18.0),
+    }
+}
 
 /// Hourly tick: farms grow food, distributed evenly to food venues.
 pub fn produce_food(city: &mut City, hour: u32) {
@@ -104,5 +119,22 @@ mod tests {
         for b in city.buildings.iter().filter(|b| b.kind.is_food()) {
             assert!(b.stock <= STOCK_CAP);
         }
+    }
+
+    #[test]
+    fn retail_covers_wholesale() {
+        for k in [BuildingKind::NoodleBar, BuildingKind::VendingPlaza] {
+            assert!(
+                meal_price(k) > WHOLESALE_PRICE,
+                "{k:?} sells below wholesale"
+            );
+        }
+    }
+
+    #[test]
+    fn farm_wages_below_other_wages() {
+        assert_eq!(wage_range(BuildingKind::HydroFarm), (9.0, 11.0));
+        assert_eq!(wage_range(BuildingKind::DataCenter), (11.0, 18.0));
+        assert_eq!(wage_range(BuildingKind::FusionPlant), (11.0, 18.0));
     }
 }
