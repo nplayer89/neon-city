@@ -1057,8 +1057,8 @@ git commit -m "feat: building inspector shows balance for money-loop buildings"
 
 - [ ] **Step 2: Full verification**
 
-Run: `cargo fmt && cargo test`
-Expected: no formatting diff churn beyond the files touched; every test passes.
+Run: `cargo test`
+Expected: every test passes. (Do NOT run `cargo fmt` — this repo intentionally does not use rustfmt; match the surrounding compact style by hand.)
 
 Run: `cargo run` for a couple of game days at high speed; sanity-watch the ticker for the occasional `can't make payroll` / `quit` lines (rare is correct) and `DailyWages` totals (~$4k–5k).
 
