@@ -1,4 +1,6 @@
 use crate::sim::citizen::NEED_KINDS;
+use crate::sim::city::{BuildingKind, City};
+use crate::sim::economy::WHOLESALE_PRICE;
 use crate::sim::world::World;
 use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
 use macroquad::prelude::*;
@@ -62,6 +64,57 @@ fn band_color(b: Band) -> Color {
         Band::Medium => Color::new(0.95, 0.8, 0.25, 1.0),
         Band::Low => Color::new(1.0, 0.25, 0.4, 1.0),
     }
+}
+
+/// Display order of the BUSINESSES tab: commercial first, then industry.
+/// Doubles as the membership filter — kinds not listed don't appear
+/// (equivalent to is_workplace() || has_balance(); the order test pins it).
+const BUSINESS_KIND_ORDER: [BuildingKind; 7] = [
+    BuildingKind::NoodleBar,
+    BuildingKind::VendingPlaza,
+    BuildingKind::Arcade,
+    BuildingKind::HydroFarm,
+    BuildingKind::FusionPlant,
+    BuildingKind::RoboticsFab,
+    BuildingKind::DataCenter,
+];
+
+/// Group rank of a kind in the businesses list; None = not a business.
+pub fn business_rank(kind: BuildingKind) -> Option<usize> {
+    BUSINESS_KIND_ORDER.iter().position(|k| *k == kind)
+}
+
+/// Building ids for the BUSINESSES tab: grouped by BUSINESS_KIND_ORDER,
+/// id-ascending within a group. Buildings never spawn or despawn mid-run,
+/// so this is computed once, like the citizen order.
+pub fn business_order(city: &City) -> Vec<u16> {
+    let mut ids: Vec<u16> = city
+        .buildings
+        .iter()
+        .filter(|b| business_rank(b.kind).is_some())
+        .map(|b| b.id)
+        .collect();
+    ids.sort_by_key(|&id| (business_rank(city.buildings[id as usize].kind), id));
+    ids
+}
+
+/// Detail-column text: meals on hand for food venues, headcount for
+/// employers, blank for arcades.
+pub fn business_detail(kind: BuildingKind, stock: f32, workers: usize) -> String {
+    if kind.is_food() {
+        format!("{}m", stock.floor())
+    } else if kind.is_workplace() {
+        format!("{workers}w")
+    } else {
+        String::new()
+    }
+}
+
+/// Red-balance rule: an employer that missed payroll, or a food venue that
+/// can't afford its next wholesale meal. Industry (no books yet) only trips
+/// via the insolvent flag; arcades never struggle.
+pub fn business_struggling(kind: BuildingKind, balance: f32, insolvent: bool) -> bool {
+    (kind.is_workplace() && insolvent) || (kind.is_food() && balance < WHOLESALE_PRICE)
 }
 
 /// Draws text clipped to `max_w` so long names never run under the icons.
@@ -204,5 +257,48 @@ mod tests {
                 world.citizens[pair[1]].name
             );
         }
+    }
+
+    #[test]
+    fn business_detail_per_kind() {
+        use crate::sim::city::BuildingKind;
+        assert_eq!(business_detail(BuildingKind::NoodleBar, 17.9, 0), "17m");
+        assert_eq!(business_detail(BuildingKind::VendingPlaza, 0.4, 9), "0m");
+        assert_eq!(business_detail(BuildingKind::HydroFarm, 5.0, 3), "3w");
+        assert_eq!(business_detail(BuildingKind::DataCenter, 0.0, 5), "5w");
+        assert_eq!(business_detail(BuildingKind::Arcade, 0.0, 0), "");
+    }
+
+    #[test]
+    fn business_struggling_rules() {
+        use crate::sim::city::BuildingKind::*;
+        assert!(business_struggling(HydroFarm, 500.0, true), "insolvent employer");
+        assert!(!business_struggling(HydroFarm, 0.0, false), "farms are judged by payroll, not restock");
+        assert!(business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_PRICE - 0.01, false), "venue below one meal");
+        assert!(!business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_PRICE, false), "boundary: exactly one meal");
+        assert!(!business_struggling(Arcade, 0.0, false), "arcades never struggle");
+        assert!(!business_struggling(DataCenter, 0.0, false), "industry balance is meaningless");
+    }
+
+    #[test]
+    fn business_order_grouped_and_complete() {
+        use crate::sim::city::BuildingKind;
+        let world = crate::sim::world::World::new(2161, 48);
+        let order = business_order(&world.city);
+        assert_eq!(order.len(), 19, "4 noodle + 3 vending + 3 arcade + 2 farm + 2 fusion + 3 fab + 2 dc");
+        let ranks: Vec<usize> = order
+            .iter()
+            .map(|&id| business_rank(world.city.buildings[id as usize].kind).unwrap())
+            .collect();
+        assert!(ranks.windows(2).all(|w| w[0] <= w[1]), "not grouped: {ranks:?}");
+        for pair in order.windows(2) {
+            let same_group = business_rank(world.city.buildings[pair[0] as usize].kind)
+                == business_rank(world.city.buildings[pair[1] as usize].kind);
+            if same_group {
+                assert!(pair[0] < pair[1], "ids not ascending within a group");
+            }
+        }
+        assert!(business_rank(BuildingKind::Apartment).is_none());
+        assert!(business_rank(BuildingKind::HoloPark).is_none());
     }
 }
