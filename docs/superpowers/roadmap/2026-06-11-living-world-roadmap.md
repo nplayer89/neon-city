@@ -72,7 +72,7 @@ Do not pull work from a later phase into an earlier one; the cuts exist to keep 
 
 **Out of scope:** trucks/logistics, business closure, rent, utility bills.
 
-**Open decisions (resolve during spec):** money supply — seed balances and let it ride, or add a small city-treasury faucet/sink (e.g., a stipend for the unemployed) to keep the economy from deadlocking. Where Holo Park (free venue) and non-commercial workplaces (Fusion Plant, Data Center, Robotics Fab) get revenue — likely a flat "city contract" income to fund their wages until they sell something real.
+**Open decisions:** resolved — see `docs/superpowers/specs/2026-06-11-business-wallets-design.md`. Industry revenue (Fusion Plant, Data Center, Robotics Fab) deferred: their wages keep being minted but are tracked, so conservation stays testable. No stipend. Farm payroll and food prices rebalanced so farm books almost close.
 
 **Exit criteria:** total money in world is conserved (test); a venue's balance visibly rises and falls in the inspector; insolvency event appears in the ticker.
 
@@ -93,7 +93,7 @@ Do not pull work from a later phase into an earlier one; the cuts exist to keep 
 
 **Out of scope:** supply chains beyond food (power, materials), traffic congestion, multiple goods types.
 
-**Open decisions (resolve during spec):** truck ownership model (per-farm vs. shared depot); whether closed venues ever reopen in this phase.
+**Open decisions (resolve during spec):** truck ownership model (per-farm vs. shared depot); whether closed venues ever reopen in this phase; dynamic supply/demand pricing (deferred from Phase 2 — purchase orders give the honest demand signal that hourly push-distribution lacks).
 
 **Exit criteria:** trucks visibly drive pickup/delivery routes; venue stock only changes via deliveries and meals sold; a starved-of-stock venue closes and the ticker reports it.
 
