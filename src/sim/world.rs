@@ -54,7 +54,19 @@ impl World {
             let mut c = Citizen::spawn(&mut world.rng, i, home, pos, &mut used_names);
             // ~80% employed
             if world.rng.chance(0.8) {
-                let wp = workplaces[i % workplaces.len()];
+                // Round-robin, but skip farms already at capacity — surplus
+                // shifts to industry, whose minted wages absorb anyone.
+                let mut idx = i % workplaces.len();
+                for _ in 0..workplaces.len() {
+                    let b = &world.city.buildings[workplaces[idx] as usize];
+                    if b.kind != BuildingKind::HydroFarm
+                        || b.workers.len() < economy::FARM_MAX_WORKERS
+                    {
+                        break;
+                    }
+                    idx = (idx + 1) % workplaces.len();
+                }
+                let wp = workplaces[idx];
                 let roll = world.rng.gen_f32();
                 let shift = if roll < SHIFT_WEIGHTS[0] {
                     SHIFTS[0]
@@ -63,11 +75,12 @@ impl World {
                 } else {
                     SHIFTS[2]
                 };
+                let (lo, hi) = economy::wage_range(world.city.buildings[wp as usize].kind);
                 c.job = Some(Job {
                     workplace: wp,
                     shift_start: shift.0,
                     shift_end: shift.1,
-                    wage_per_hour: world.rng.gen_f32_range(11.0, 18.0),
+                    wage_per_hour: world.rng.gen_f32_range(lo, hi),
                     unpaid_hours: 0,
                 });
                 world.city.buildings[wp as usize].workers.push(i);
@@ -726,6 +739,31 @@ mod tests {
             "paid hour must reset the counter"
         );
         assert!(!w.city.buildings[farm as usize].insolvent, "flag must clear on payment");
+    }
+
+    #[test]
+    fn farm_staffing_capped_and_wages_match_kind() {
+        for seed in [7u64, 21, 2161] {
+            let w = World::new(seed, 48);
+            for b in w.city.buildings.iter().filter(|b| b.kind == BuildingKind::HydroFarm) {
+                assert!(
+                    b.workers.len() <= economy::FARM_MAX_WORKERS,
+                    "seed {seed}: farm has {} workers",
+                    b.workers.len()
+                );
+            }
+            for c in &w.citizens {
+                if let Some(job) = &c.job {
+                    let kind = w.city.buildings[job.workplace as usize].kind;
+                    let (lo, hi) = economy::wage_range(kind);
+                    assert!(
+                        job.wage_per_hour >= lo && job.wage_per_hour <= hi,
+                        "seed {seed}: {kind:?} wage {} outside [{lo}, {hi}]",
+                        job.wage_per_hour
+                    );
+                }
+            }
+        }
     }
 
     #[test]
