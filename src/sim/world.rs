@@ -262,6 +262,7 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
             }
             building.stock -= 1.0;
             c.money -= price;
+            building.balance += price;
             if building.stock < 1.0 {
                 push_event(events, SimEvent { tick, kind: EventKind::VenueSoldOut { building: b } });
             }
@@ -273,6 +274,7 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
                 return;
             }
             c.money -= price;
+            building.balance += price;
         }
         _ => {}
     }
@@ -496,5 +498,25 @@ mod tests {
             }
         }
         assert_eq!(crossings, 1, "edge trigger fired {crossings} times");
+    }
+
+    #[test]
+    fn meal_payment_credits_venue() {
+        let mut w = World::new(17, 6);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        w.city.buildings[venue as usize].stock = 10.0;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        w.citizens[0].money = 100.0;
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(venue), activity: Activity::Eat };
+        let balance_before = w.city.buildings[venue as usize].balance;
+        let price = crate::sim::economy::meal_price(w.city.buildings[venue as usize].kind);
+        w.tick();
+        let gained = w.city.buildings[venue as usize].balance - balance_before;
+        assert!((gained - price).abs() < 1e-3, "venue gained {gained}, price {price}");
+        assert!((w.citizens[0].money - (100.0 - price)).abs() < 1e-3);
     }
 }
