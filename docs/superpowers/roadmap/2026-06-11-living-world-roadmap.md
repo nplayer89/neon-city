@@ -20,7 +20,7 @@ Do not pull work from a later phase into an earlier one; the cuts exist to keep 
 | Phase | Title | Status |
 |-------|-------|--------|
 | 1 | Event feed & sim event bus | done |
-| 2 | Business wallets & closed money loop | pending |
+| 2 | Business wallets & closed money loop | done |
 | 3 | Delivery trucks & supply chain | pending |
 | 4 | Aging & mortality | pending |
 | 5 | Relationships & social need | pending |
