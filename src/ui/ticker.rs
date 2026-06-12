@@ -69,6 +69,22 @@ pub fn format_event(world: &World, ev: &SimEvent) -> (String, Selection) {
             format!("[{stamp}] Day {day} wrap-up: ${total:.0} paid in wages"),
             Selection::None,
         ),
+        EventKind::EmployerInsolvent { building } => (
+            format!(
+                "[{stamp}] {} #{:03} can't make payroll",
+                world.city.buildings[building as usize].kind.name(),
+                building
+            ),
+            Selection::Building(building),
+        ),
+        EventKind::WorkerQuit { citizen, building } => (
+            format!(
+                "[{stamp}] {} quit {} over unpaid wages",
+                world.citizens[citizen].name,
+                world.city.buildings[building as usize].kind.name()
+            ),
+            Selection::Citizen(citizen),
+        ),
     }
 }
 
@@ -78,6 +94,8 @@ fn event_color(kind: EventKind) -> Color {
         EventKind::CriticalNeed { .. } => Color::new(1.0, 0.35, 0.35, 1.0),
         EventKind::CantAffordMeal { .. } => Color::new(1.0, 0.3, 0.85, 1.0),
         EventKind::DailyWages { .. } => CYAN,
+        EventKind::EmployerInsolvent { .. } => Color::new(1.0, 0.55, 0.15, 1.0),
+        EventKind::WorkerQuit { .. } => Color::new(0.95, 0.4, 0.3, 1.0),
     }
 }
 
@@ -198,6 +216,39 @@ mod tests {
         assert!(text.contains(&w.citizens[1].name), "{text}");
         assert!(text.contains("can't afford"), "{text}");
         assert!(text.contains(venue.kind.name()), "{text}");
+        assert_eq!(target, Selection::Citizen(1));
+    }
+
+    #[test]
+    fn insolvent_line_names_employer_and_targets_it() {
+        let w = World::new(3, 4);
+        let farm = w
+            .city
+            .buildings
+            .iter()
+            .find(|b| b.kind == crate::sim::city::BuildingKind::HydroFarm)
+            .unwrap();
+        let ev = SimEvent { tick: 30, kind: EventKind::EmployerInsolvent { building: farm.id } };
+        let (text, target) = format_event(&w, &ev);
+        assert!(text.contains("payroll"), "{text}");
+        assert!(text.contains(farm.kind.name()), "{text}");
+        assert_eq!(target, Selection::Building(farm.id));
+    }
+
+    #[test]
+    fn worker_quit_line_names_both_and_targets_citizen() {
+        let w = World::new(3, 4);
+        let farm = w
+            .city
+            .buildings
+            .iter()
+            .find(|b| b.kind == crate::sim::city::BuildingKind::HydroFarm)
+            .unwrap();
+        let ev = SimEvent { tick: 30, kind: EventKind::WorkerQuit { citizen: 1, building: farm.id } };
+        let (text, target) = format_event(&w, &ev);
+        assert!(text.contains(&w.citizens[1].name), "{text}");
+        assert!(text.contains("quit"), "{text}");
+        assert!(text.contains(farm.kind.name()), "{text}");
         assert_eq!(target, Selection::Citizen(1));
     }
 }
