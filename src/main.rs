@@ -78,7 +78,7 @@ async fn main() {
             inspector.selection = sel;
             inspector.follow = false;
         }
-        inspector.draw(&world, &mut cam, &mut hud, hovered);
+        inspector.draw(&world, &mut cam, &mut hud, hovered.map(ui::inspector::Selection::Citizen));
         next_frame().await
     }
 }
