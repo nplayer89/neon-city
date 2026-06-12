@@ -71,7 +71,7 @@ fn band_color(b: Band) -> Color {
 
 /// Display order of the BUSINESSES tab: commercial first, then industry.
 /// Doubles as the membership filter — kinds not listed don't appear
-/// (equivalent to is_workplace() || has_balance(); the order test pins it).
+/// (equivalent to is_workplace() || has_balance(); a membership test pins it).
 const BUSINESS_KIND_ORDER: [BuildingKind; 7] = [
     BuildingKind::NoodleBar,
     BuildingKind::VendingPlaza,

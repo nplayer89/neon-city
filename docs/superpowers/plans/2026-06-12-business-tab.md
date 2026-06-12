@@ -14,7 +14,7 @@
 - Branch: `business-tab` (already created, stacked on `living-world-phase-2` — Phase 2's `balance`/`insolvent`/`WHOLESALE_PRICE` are dependencies).
 - NO rustfmt — match the surrounding compact style by hand; never run `cargo fmt`.
 - `cargo build` may show transient dead_code warnings for Task 1's helpers until Task 3 consumes them; leave them alone.
-- Baseline test count: 63. After Task 1: 66. After Task 3: 67.
+- Baseline test count: 63. After Task 1: 66. After Task 3: 68 (includes a review-rider membership test).
 
 ---
 
@@ -460,7 +460,7 @@ and the inspector call drops the Task 2 shim:
 - [ ] **Step 4: Run to verify pass**
 
 Run: `cargo test`
-Expected: 67 passed. `cargo build` — zero warnings (Task 1's helpers are now consumed).
+Expected: 68 passed. `cargo build` — zero warnings (Task 1's helpers are now consumed).
 
 - [ ] **Step 5: Commit**
 
@@ -475,7 +475,7 @@ git commit -m "feat: sidebar BUSINESSES tab with hover preview and click-select"
 
 - [ ] **Step 1: Suite + build**
 
-Run: `cargo test` (expect 67 passed) and `cargo build` (expect zero warnings).
+Run: `cargo test` (expect 68 passed) and `cargo build` (expect zero warnings).
 
 - [ ] **Step 2: Visual verification** (controller does this via the headless web harness — `./build_web.sh`, serve `web/`, drive with playwright):
 - Boot: sidebar shows CITIZENS active, BUSINESSES dim.
