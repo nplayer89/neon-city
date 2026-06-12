@@ -56,6 +56,17 @@ impl BuildingKind {
     pub fn is_leisure(&self) -> bool {
         matches!(self, BuildingKind::Arcade | BuildingKind::HoloPark)
     }
+
+    /// Participates in the Phase 2 money loop (holds a balance the UI shows).
+    pub fn has_balance(&self) -> bool {
+        self.is_food() || matches!(self, BuildingKind::Arcade | BuildingKind::HydroFarm)
+    }
+
+    /// Employers that pay wages from their own balance. Everyone else's
+    /// wages are minted (industry revenue is deferred — see Phase 2 spec).
+    pub fn wages_from_balance(&self) -> bool {
+        matches!(self, BuildingKind::HydroFarm)
+    }
 }
 
 pub struct Building {
@@ -69,6 +80,10 @@ pub struct Building {
     pub door: (i32, i32),
     /// Food venues only: meals in stock.
     pub stock: f32,
+    /// Money the business holds (Phase 2). Stays 0 for kinds outside the loop.
+    pub balance: f32,
+    /// Latch so EmployerInsolvent events edge-trigger.
+    pub insolvent: bool,
     /// Citizen ids currently inside.
     pub occupants: Vec<usize>,
     /// Citizen ids employed here.
@@ -198,6 +213,15 @@ impl City {
         let door = candidates[rng.gen_range(0, candidates.len() as i32) as usize];
 
         let stock = if kind.is_food() { 20.0 } else { 0.0 };
+        // Day-one float: venues can buy the first deliveries, farms can cover
+        // roughly half a day of payroll before wholesale revenue arrives.
+        let balance = if kind.is_food() {
+            100.0
+        } else if kind == BuildingKind::HydroFarm {
+            300.0
+        } else {
+            0.0
+        };
         self.buildings.push(Building {
             id,
             kind,
@@ -207,6 +231,8 @@ impl City {
             h: bh,
             door,
             stock,
+            balance,
+            insolvent: false,
             occupants: vec![],
             workers: vec![],
             vis_seed: rng.next_u32(),
@@ -262,5 +288,33 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn balances_seeded_by_kind() {
+        let city = City::generate(&mut Rng::new(4));
+        for b in &city.buildings {
+            let expected = if b.kind.is_food() {
+                100.0
+            } else if b.kind == BuildingKind::HydroFarm {
+                300.0
+            } else {
+                0.0
+            };
+            assert_eq!(b.balance, expected, "{:?}", b.kind);
+            assert!(!b.insolvent, "{:?} starts insolvent", b.kind);
+        }
+    }
+
+    #[test]
+    fn money_loop_participation_by_kind() {
+        assert!(BuildingKind::NoodleBar.has_balance());
+        assert!(BuildingKind::VendingPlaza.has_balance());
+        assert!(BuildingKind::Arcade.has_balance());
+        assert!(BuildingKind::HydroFarm.has_balance());
+        assert!(!BuildingKind::Apartment.has_balance());
+        assert!(!BuildingKind::FusionPlant.has_balance());
+        assert!(BuildingKind::HydroFarm.wages_from_balance());
+        assert!(!BuildingKind::DataCenter.wages_from_balance());
     }
 }
