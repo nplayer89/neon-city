@@ -62,8 +62,10 @@ Wages settle **on the hour** instead of accruing per tick: a worker in the
 `Performing { Work }` state at an hour boundary receives `wage_per_hour` in
 one transfer. Farm workers are paid from the farm balance; industry workers
 are paid the same way except the money is minted (`minted += wage`).
-Consequences, accepted: paydays are chunky and legible in the wallet; a
-partial hour (arrived late, quit early) pays nothing for that hour.
+Consequences, accepted: paydays are chunky and legible in the wallet;
+payment goes to whoever is in the Work state at the boundary — a late
+arrival still collects the full hour, while leaving early forfeits the
+partial hour.
 `wages_today` / the `DailyWages` event keep their meaning (sum of all wages
 actually paid).
 

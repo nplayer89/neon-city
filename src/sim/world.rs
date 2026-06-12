@@ -156,6 +156,7 @@ fn settle_wage(
         return (0.0, 0.0);
     }
     let Some(job) = c.job.as_mut() else { return (0.0, 0.0) };
+    debug_assert_eq!(job.workplace, at, "settling wages away from the job site");
     let wage = job.wage_per_hour;
     let employer = &mut city.buildings[at as usize];
     if !employer.kind.wages_from_balance() {
@@ -725,5 +726,37 @@ mod tests {
             "paid hour must reset the counter"
         );
         assert!(!w.city.buildings[farm as usize].insolvent, "flag must clear on payment");
+    }
+
+    #[test]
+    fn final_shift_hour_paid_then_worker_leaves() {
+        let mut w = World::new(21, 4);
+        let dc =
+            w.city.buildings.iter().find(|b| b.kind == BuildingKind::DataCenter).unwrap().id;
+        for c in w.citizens.iter_mut() {
+            c.needs = Needs::full();
+            c.job = None;
+        }
+        // One-hour shift: the 01:00 boundary both pays the trailing hour and ends
+        // the shift — settle-before-done means the wage lands, then they walk out.
+        w.citizens[0].job = Some(Job {
+            workplace: dc,
+            shift_start: 0,
+            shift_end: 1,
+            wage_per_hour: 10.0,
+            unpaid_hours: 0,
+        });
+        w.citizens[0].path.clear();
+        w.citizens[0].state = CitizenState::Traveling { to: Some(dc), activity: Activity::Work };
+        let money_before = w.citizens[0].money;
+        for _ in 0..TICKS_PER_HOUR {
+            w.tick();
+        }
+        let earned = w.citizens[0].money - money_before;
+        assert!((earned - 10.0).abs() < 1e-3, "final hour not paid exactly once: {earned}");
+        assert!(
+            matches!(w.citizens[0].state, CitizenState::Idle { .. }),
+            "worker should have left after the shift-end settlement"
+        );
     }
 }
