@@ -156,10 +156,12 @@ impl World {
             h = mix(h, c.money.to_bits() as u64);
             h = mix(h, c.needs.hunger.to_bits() as u64);
             h = mix(h, c.needs.energy.to_bits() as u64);
+            h = mix(h, c.job.as_ref().map_or(0, |j| j.unpaid_hours as u64 + 1));
         }
         for b in &self.city.buildings {
             h = mix(h, b.stock.to_bits() as u64);
             h = mix(h, b.balance.to_bits() as u64);
+            h = mix(h, b.insolvent as u64);
             h = mix(h, b.occupants.len() as u64);
         }
         h = mix(h, self.minted.to_bits() as u64);
@@ -811,20 +813,30 @@ mod tests {
 
     /// Phase 2 exit criterion: money is conserved end to end. Runs three game
     /// days at the shipped seed and checks the economy is still alive after.
-    /// (Slow in debug — roughly 10-30s; it earns its keep.)
+    /// (~0.3s in debug. If "every farm collapsed" ever fires after retuning,
+    /// the calibration knob is WHOLESALE_PRICE — raise it toward 8.0.)
     #[test]
     fn three_day_money_conservation_soak() {
         let mut w = World::new(2161, 48);
         let initial = w.total_money();
-        for _ in 0..(crate::sim::time::TICKS_PER_DAY * 3) {
+        let mut ate_on_day_3 = false;
+        for t in 0..(crate::sim::time::TICKS_PER_DAY * 3) {
             w.tick();
+            if t >= crate::sim::time::TICKS_PER_DAY * 2
+                && w.citizens.iter().any(|c| {
+                    matches!(c.state, CitizenState::Performing { activity: Activity::Eat, .. })
+                })
+            {
+                ate_on_day_3 = true;
+            }
         }
         let drift = (w.total_money() - initial - w.minted).abs();
         assert!(drift < 0.5, "conservation drift {drift} (minted {})", w.minted);
         assert!(w.minted > 0.0, "industry never paid wages");
         let venue_total: f32 =
             w.city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.balance).sum();
-        assert!(venue_total > 0.0, "every venue is broke");
+        assert!(venue_total > 100.0, "venues nearly broke: {venue_total}");
+        assert!(ate_on_day_3, "nobody ate on day 3 - food economy deadlocked");
         assert!(
             w.city
                 .buildings
@@ -857,5 +869,6 @@ mod tests {
         let gained = w.city.buildings[arcade as usize].balance - balance_before;
         assert!(price > 0.0, "arcade should charge");
         assert!((gained - price).abs() < 1e-3, "arcade gained {gained}, price {price}");
+        assert!((w.citizens[0].money - (100.0 - price)).abs() < 1e-3);
     }
 }
