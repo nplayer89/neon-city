@@ -84,12 +84,23 @@ pub struct Building {
     pub balance: f32,
     /// Latch so EmployerInsolvent events edge-trigger.
     pub insolvent: bool,
+    /// Venue has shut down (frozen, dark). Food venues only.
+    pub closed: bool,
+    /// Consecutive hours a venue couldn't afford one wholesale meal.
+    pub hours_broke: u32,
     /// Citizen ids currently inside.
     pub occupants: Vec<usize>,
     /// Citizen ids employed here.
     pub workers: Vec<usize>,
     /// Per-building visual variation seed.
     pub vis_seed: u32,
+}
+
+impl Building {
+    /// Open for business (used by ordering, dispatch, and AI targeting).
+    pub fn open(&self) -> bool {
+        !self.closed
+    }
 }
 
 pub struct City {
@@ -233,6 +244,8 @@ impl City {
             stock,
             balance,
             insolvent: false,
+            closed: false,
+            hours_broke: 0,
             occupants: vec![],
             workers: vec![],
             vis_seed: rng.next_u32(),
@@ -316,5 +329,14 @@ mod tests {
         assert!(!BuildingKind::FusionPlant.has_balance());
         assert!(BuildingKind::HydroFarm.wages_from_balance());
         assert!(!BuildingKind::DataCenter.wages_from_balance());
+    }
+
+    #[test]
+    fn buildings_start_open_with_no_broke_hours() {
+        let city = City::generate(&mut Rng::new(4));
+        for b in &city.buildings {
+            assert!(b.open(), "{:?} starts closed", b.kind);
+            assert_eq!(b.hours_broke, 0);
+        }
     }
 }
