@@ -10,6 +10,7 @@ pub fn activity_color(state: &CitizenState) -> Color {
         CitizenState::Traveling { activity, .. } => Some(*activity),
         CitizenState::Performing { activity, .. } => Some(*activity),
         CitizenState::Idle { .. } => None,
+        CitizenState::Driving { .. } => None,
     };
     match act {
         Some(Activity::Sleep) => Color::new(0.35, 0.55, 1.0, 1.0),
@@ -23,8 +24,8 @@ pub fn activity_color(state: &CitizenState) -> Color {
 
 pub fn draw_citizens(world: &World, cam: &Camera, t: f32) {
     for c in &world.citizens {
-        // citizens inside buildings aren't drawn
-        if matches!(c.state, CitizenState::Performing { .. }) {
+        // citizens inside buildings or out driving aren't drawn as pedestrians
+        if matches!(c.state, CitizenState::Performing { .. } | CitizenState::Driving { .. }) {
             continue;
         }
         let (sx, sy) = cam.to_screen(c.pos.0, c.pos.1);

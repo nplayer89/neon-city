@@ -2,6 +2,7 @@ use crate::sim::ai;
 use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind, NEED_KINDS};
 use crate::sim::city::{BuildingKind, City};
 use crate::sim::economy;
+use crate::sim::logistics::{Truck, TruckState};
 use crate::sim::event::{push_event, EventKind, SimEvent};
 use crate::sim::path;
 use crate::sim::rng::Rng;
@@ -23,6 +24,8 @@ pub struct World {
     /// their revenue is deferred; see the Phase 2 spec). The conservation
     /// invariant is: Σ wallets + Σ balances == initial total + minted.
     minted: f32,
+    /// Per-farm delivery trucks (one each, created at init).
+    pub trucks: Vec<Truck>,
 }
 
 const SHIFTS: [(u32, u32); 3] = [(8, 16), (16, 24), (0, 8)];
@@ -33,7 +36,7 @@ impl World {
     pub fn new(seed: u64, n_citizens: usize) -> World {
         let mut rng = Rng::new(seed);
         let city = City::generate(&mut rng);
-        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0, minted: 0.0 };
+        let mut world = World { rng, city, citizens: vec![], tick: 0, seed, events: VecDeque::new(), wages_today: 0.0, minted: 0.0, trucks: vec![] };
 
         let homes: Vec<u16> = world
             .city
@@ -88,6 +91,24 @@ impl World {
             }
             c.state = CitizenState::Idle { until: world.rng.gen_range(0, 120) as u64 };
             world.citizens.push(c);
+        }
+        let farms: Vec<u16> = world
+            .city
+            .buildings_of(|k| k == BuildingKind::HydroFarm)
+            .map(|b| b.id)
+            .collect();
+        for (i, farm) in farms.into_iter().enumerate() {
+            let door = world.city.buildings[farm as usize].door;
+            world.trucks.push(Truck {
+                id: i,
+                home_farm: farm,
+                driver: None,
+                pos: (door.0 as f32 + 0.5, door.1 as f32 + 0.5),
+                path: std::collections::VecDeque::new(),
+                speed: economy::TRUCK_SPEED,
+                cargo: 0.0,
+                state: TruckState::Parked,
+            });
         }
         world
     }
@@ -163,6 +184,19 @@ impl World {
             h = mix(h, b.balance.to_bits() as u64);
             h = mix(h, b.insolvent as u64);
             h = mix(h, b.occupants.len() as u64);
+            h = mix(h, b.closed as u64);
+            h = mix(h, b.hours_broke as u64);
+        }
+        for t in &self.trucks {
+            h = mix(h, t.pos.0.to_bits() as u64);
+            h = mix(h, t.pos.1.to_bits() as u64);
+            h = mix(h, t.cargo.to_bits() as u64);
+            h = mix(h, match t.state {
+                TruckState::Parked => 0,
+                TruckState::Outbound { venue } => 1_000 + venue as u64,
+                TruckState::Returning => 2,
+            });
+            h = mix(h, t.driver.map_or(0, |d| d as u64 + 1));
         }
         h = mix(h, self.minted.to_bits() as u64);
         h
@@ -291,6 +325,15 @@ fn tick_citizen(
                 let door = city.buildings[at as usize].door;
                 c.pos = (door.0 as f32 + 0.5, door.1 as f32 + 0.5);
                 c.state = CitizenState::Idle { until: tick + rng.gen_range(20, 90) as u64 };
+            }
+        }
+        CitizenState::Driving { .. } => {
+            // On the clock while driving; wages settle from the farm balance.
+            let at = c.job.as_ref().map(|j| j.workplace);
+            if let Some(at) = at {
+                let (w, m) = settle_wage(c, city, at, tick, events);
+                wages = w;
+                minted = m;
             }
         }
     }
@@ -845,6 +888,24 @@ mod tests {
                 .any(|b| b.kind == BuildingKind::HydroFarm && !b.workers.is_empty() && !b.insolvent),
             "every farm collapsed"
         );
+    }
+
+    #[test]
+    fn one_parked_truck_per_farm_at_init() {
+        let w = World::new(2161, 48);
+        let farms = w
+            .city
+            .buildings
+            .iter()
+            .filter(|b| b.kind == BuildingKind::HydroFarm)
+            .count();
+        assert_eq!(w.trucks.len(), farms, "expected one truck per farm");
+        for t in &w.trucks {
+            assert!(matches!(t.state, crate::sim::logistics::TruckState::Parked));
+            assert!(t.driver.is_none());
+            assert_eq!(t.cargo, 0.0);
+            assert_eq!(w.city.buildings[t.home_farm as usize].kind, BuildingKind::HydroFarm);
+        }
     }
 
     #[test]

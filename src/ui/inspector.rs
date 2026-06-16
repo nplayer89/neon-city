@@ -40,7 +40,7 @@ impl Inspector {
         // nearest visible citizen within 0.7 tiles
         let mut best: Option<(f32, usize)> = None;
         for c in &world.citizens {
-            if matches!(c.state, CitizenState::Performing { .. }) {
+            if matches!(c.state, CitizenState::Performing { .. } | CitizenState::Driving { .. }) {
                 continue;
             }
             let d2 = (c.pos.0 - wx).powi(2) + (c.pos.1 - wy).powi(2);
@@ -143,6 +143,10 @@ impl Inspector {
                 },
                 CitizenState::Performing { at, activity } => {
                     format!("{} @ {}", activity.label(), world.city.buildings[*at as usize].kind.name())
+                }
+                CitizenState::Driving { truck } => {
+                    let farm = world.trucks[*truck].home_farm;
+                    format!("Driving for {}", world.city.buildings[farm as usize].kind.name())
                 }
             };
             (s, activity_color(&c.state))
