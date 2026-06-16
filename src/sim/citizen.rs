@@ -141,6 +141,8 @@ pub enum CitizenState {
     /// Walking. `to: None` means an aimless stroll.
     Traveling { to: Option<u16>, activity: Activity },
     Performing { at: u16, activity: Activity },
+    /// Out driving a delivery truck (logistics owns the position).
+    Driving { truck: usize },
 }
 
 pub struct Citizen {

@@ -18,6 +18,10 @@ pub enum EventKind {
     EmployerInsolvent { building: u16 },
     /// A worker quit after a full shift of missed pay.
     WorkerQuit { citizen: usize, building: u16 },
+    /// A truck dropped meals at a venue.
+    DeliveryCompleted { farm: u16, venue: u16, meals: u16 },
+    /// A food venue closed for good after chronic insolvency.
+    BusinessClosed { building: u16 },
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

@@ -40,7 +40,7 @@ impl Inspector {
         // nearest visible citizen within 0.7 tiles
         let mut best: Option<(f32, usize)> = None;
         for c in &world.citizens {
-            if matches!(c.state, CitizenState::Performing { .. }) {
+            if matches!(c.state, CitizenState::Performing { .. } | CitizenState::Driving { .. }) {
                 continue;
             }
             let d2 = (c.pos.0 - wx).powi(2) + (c.pos.1 - wy).powi(2);
@@ -151,6 +151,10 @@ impl Inspector {
                 CitizenState::Performing { at, activity } => {
                     format!("{} @ {}", activity.label(), world.city.buildings[*at as usize].kind.name())
                 }
+                CitizenState::Driving { truck } => {
+                    let farm = world.trucks[*truck].home_farm;
+                    format!("Driving for {}", world.city.buildings[farm as usize].kind.name())
+                }
             };
             (s, activity_color(&c.state))
         };
@@ -183,6 +187,9 @@ impl Inspector {
 
         draw_text(b.kind.name(), x + 14.0, y + 30.0, 26.0, crate::render::buildings::trim_color(b.kind));
         draw_text(&format!("#{:03}", b.id), x + w - 60.0, y + 30.0, 18.0, Color::new(0.6, 0.75, 0.9, 0.8));
+        if b.closed {
+            draw_text("CLOSED", x + 14.0, y + 52.0, 18.0, Color::new(0.85, 0.2, 0.25, 1.0));
+        }
 
         let mut by = y + 64.0;
 
@@ -192,9 +199,11 @@ impl Inspector {
             draw_text(value, x + 110.0, by, 15.0, WHITE);
         }
 
-        if b.kind.is_food() {
+        if b.kind.is_food() || b.kind == crate::sim::city::BuildingKind::HydroFarm {
             draw_line_item("STOCK", &format!("{:.0} meals", b.stock), x, by);
             by += 24.0;
+        }
+        if b.kind.is_food() {
             draw_line_item("PRICE", &format!("${:.0}", crate::sim::economy::meal_price(b.kind)), x, by);
             by += 24.0;
         }

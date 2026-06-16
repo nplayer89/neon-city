@@ -109,8 +109,8 @@ pub fn draw_neon(world: &World, cam: &Camera, t: f32, amb: f32) {
     for b in &world.city.buildings {
         let (sx, sy) = cam.to_screen(b.x as f32, b.y as f32);
         let (w, h) = (b.w as f32 * cam.ppt, b.h as f32 * cam.ppt);
-        let mut c = trim_color(b.kind);
-        c.a = glow;
+        let mut c = if b.closed { Color::new(0.3, 0.32, 0.38, 1.0) } else { trim_color(b.kind) };
+        c.a = if b.closed { 0.5 } else { glow };
         draw_rectangle_lines(sx, sy, w, h, (cam.ppt * 0.09).max(1.5), c);
 
         // door marker
