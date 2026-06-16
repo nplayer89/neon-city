@@ -62,9 +62,9 @@ impl Inspector {
         self.follow = false;
     }
 
-    /// `preview`: a citizen to show instead of the selection (roster hover).
+    /// `preview`: an entity to show instead of the selection (roster hover).
     /// Previewing never alters the selection or follow state.
-    pub fn draw(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, preview: Option<usize>) {
+    pub fn draw(&mut self, world: &World, cam: &mut Camera, hud: &mut HudState, preview: Option<Selection>) {
         // Follow-centering stays tied to the selection even while previewing,
         // so hovering a roster row never yanks a followed camera.
         if self.follow {
@@ -72,9 +72,16 @@ impl Inspector {
                 cam.center = world.citizens[id].pos;
             }
         }
-        if let Some(id) = preview {
-            self.draw_citizen_panel(world, cam, hud, id, true);
-            return;
+        match preview {
+            Some(Selection::Citizen(id)) => {
+                self.draw_citizen_panel(world, cam, hud, id, true);
+                return;
+            }
+            Some(Selection::Building(id)) => {
+                self.draw_building_panel(world, hud, id);
+                return;
+            }
+            Some(Selection::None) | None => {}
         }
         match self.selection {
             Selection::None => {}
