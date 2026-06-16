@@ -896,8 +896,9 @@ mod tests {
 
     /// Phase 2 exit criterion: money is conserved end to end. Runs three game
     /// days at the shipped seed and checks the economy is still alive after.
-    /// (~0.3s in debug. If "every farm collapsed" ever fires after retuning,
-    /// the calibration knob is WHOLESALE_PRICE — raise it toward 8.0.)
+    /// (~0.3s in debug. Food now arrives by truck at a dynamic price. If venues
+    /// starve, the levers are economy::TRUCK_CAPACITY (raise), ORDER_THRESHOLD
+    /// (raise), or PRICE_LO_MULT (raise, to protect farm solvency).)
     #[test]
     fn three_day_money_conservation_soak() {
         let mut w = World::new(2161, 48);
@@ -927,6 +928,13 @@ mod tests {
                 .any(|b| b.kind == BuildingKind::HydroFarm && !b.workers.is_empty() && !b.insolvent),
             "every farm collapsed"
         );
+        let open_venues = w
+            .city
+            .buildings
+            .iter()
+            .filter(|b| b.kind.is_food() && b.open())
+            .count();
+        assert!(open_venues >= 2, "supply chain starved the city: only {open_venues} venues open");
     }
 
     #[test]
