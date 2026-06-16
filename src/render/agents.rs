@@ -53,6 +53,43 @@ pub fn draw_citizens(world: &World, cam: &Camera, t: f32) {
     }
 }
 
+/// Delivery trucks — larger than ambient cars, amber hauler with a cargo pip.
+pub fn draw_trucks(world: &World, cam: &Camera, t: f32) {
+    let night = crate::sim::time::is_night(world.tick);
+    for truck in &world.trucks {
+        if matches!(truck.state, crate::sim::logistics::TruckState::Parked) {
+            continue; // parked at the farm; skip to keep the depot uncluttered
+        }
+        let (sx, sy) = cam.to_screen(truck.pos.0, truck.pos.1);
+        if sx < -40.0 || sy < -40.0 || sx > screen_width() + 40.0 || sy > screen_height() + 40.0 {
+            continue;
+        }
+        // direction from the next waypoint, for orientation
+        let (mut dx, mut dy) = (1.0f32, 0.0f32);
+        if let Some(&(nx, ny)) = truck.path.front() {
+            let (vx, vy) = (nx as f32 + 0.5 - truck.pos.0, ny as f32 + 0.5 - truck.pos.1);
+            let d = (vx * vx + vy * vy).sqrt().max(0.001);
+            dx = vx / d;
+            dy = vy / d;
+        }
+        let body = Color::new(1.0, 0.72, 0.24, 1.0); // amber hauler
+        let (l, w) = (cam.ppt * 0.7, cam.ppt * 0.34);
+        let horizontal = dx.abs() >= dy.abs();
+        let (rw, rh) = if horizontal { (l, w) } else { (w, l) };
+        draw_circle(sx, sy, cam.ppt * 0.55, Color::new(body.r, body.g, body.b, 0.12)); // glow
+        draw_rectangle(sx - rw / 2.0, sy - rh / 2.0, rw, rh, body);
+        // cargo pip when loaded
+        if truck.cargo > 0.0 {
+            draw_circle(sx, sy, cam.ppt * 0.12, Color::new(0.4, 1.0, 0.6, 0.95));
+        }
+        let _ = t;
+        if night {
+            let (hx, hy) = (sx + dx * l * 0.6, sy + dy * l * 0.6);
+            draw_circle(hx, hy, cam.ppt * 0.1, Color::new(1.0, 1.0, 0.9, 0.95));
+        }
+    }
+}
+
 // ---- ambient vehicles (visual flavor only; lives outside the sim) ----
 
 pub struct Vehicle {

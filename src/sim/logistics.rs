@@ -17,7 +17,6 @@ pub enum TruckState {
 }
 
 pub struct Truck {
-    pub id: usize,
     pub home_farm: u16,
     /// Citizen currently driving; Some only between dispatch and park.
     pub driver: Option<usize>,

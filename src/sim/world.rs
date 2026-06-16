@@ -97,10 +97,9 @@ impl World {
             .buildings_of(|k| k == BuildingKind::HydroFarm)
             .map(|b| b.id)
             .collect();
-        for (i, farm) in farms.into_iter().enumerate() {
+        for farm in farms {
             let door = world.city.buildings[farm as usize].door;
             world.trucks.push(Truck {
-                id: i,
                 home_farm: farm,
                 driver: None,
                 pos: (door.0 as f32 + 0.5, door.1 as f32 + 0.5),
