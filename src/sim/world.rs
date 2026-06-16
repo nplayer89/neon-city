@@ -2,7 +2,7 @@ use crate::sim::ai;
 use crate::sim::citizen::{Activity, Citizen, CitizenState, Job, NeedKind, NEED_KINDS};
 use crate::sim::city::{BuildingKind, City};
 use crate::sim::economy;
-use crate::sim::logistics::{Truck, TruckState};
+use crate::sim::logistics::{self, Truck, TruckState};
 use crate::sim::event::{push_event, EventKind, SimEvent};
 use crate::sim::path;
 use crate::sim::rng::Rng;
@@ -126,9 +126,6 @@ impl World {
     pub fn tick(&mut self) {
         self.tick += 1;
         let (tick, hour, night) = (self.tick, self.hour(), time::is_night(self.tick));
-        if self.tick % TICKS_PER_HOUR == 0 {
-            economy::distribute_food(&mut self.city, hour);
-        }
         let city = &mut self.city;
         let rng = &mut self.rng;
         let events = &mut self.events;
@@ -144,6 +141,7 @@ impl World {
             self.wages_today += w;
             self.minted += m;
         }
+        logistics::tick(&mut self.city, &mut self.trucks, &mut self.citizens, tick, hour, &mut self.events);
         if self.tick % TICKS_PER_DAY == 0 {
             let summary = EventKind::DailyWages { day: time::day(self.tick) - 1, total: self.wages_today };
             push_event(&mut self.events, SimEvent { tick: self.tick, kind: summary });
@@ -906,6 +904,75 @@ mod tests {
             assert_eq!(t.cargo, 0.0);
             assert_eq!(w.city.buildings[t.home_farm as usize].kind, BuildingKind::HydroFarm);
         }
+    }
+
+    #[test]
+    fn truck_delivers_to_a_low_venue_and_money_is_conserved() {
+        let mut w = World::new(2161, 48);
+        // A farm with stock and an on-shift driver standing at it.
+        let farm = w.city.buildings.iter().find(|b| b.kind == BuildingKind::HydroFarm).unwrap().id;
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        w.city.buildings[farm as usize].stock = 100.0;
+        w.city.buildings[venue as usize].stock = 0.0; // wide-open order
+        w.city.buildings[venue as usize].balance = 1000.0; // can pay
+        // Put a farm worker on-site, on shift, so a driver is available.
+        let driver = w.city.buildings[farm as usize].workers.first().copied()
+            .unwrap_or_else(|| { w.citizens[0].job = Some(crate::sim::citizen::Job { workplace: farm, shift_start: 0, shift_end: 24, wage_per_hour: 10.0, unpaid_hours: 0 }); w.city.buildings[farm as usize].workers.push(0); 0 });
+        // Ensure driver's shift covers hour 0 (world starts at tick 0 / hour 0).
+        if let Some(job) = w.citizens[driver].job.as_mut() { job.shift_start = 0; job.shift_end = 24; }
+        w.citizens[driver].state = CitizenState::Performing { at: farm, activity: Activity::Work };
+        w.city.buildings[farm as usize].occupants.push(driver);
+
+        let total_before = w.total_money();
+        let venue_stock_before = w.city.buildings[venue as usize].stock;
+        // Run up to ~3 hours: dispatch, drive, deliver, return.
+        let mut delivered = false;
+        for _ in 0..(TICKS_PER_HOUR * 3) {
+            w.tick();
+            for ev in w.drain_events() {
+                if matches!(ev.kind, EventKind::DeliveryCompleted { venue: v, .. } if v == venue) {
+                    delivered = true;
+                }
+            }
+            if delivered { break; }
+        }
+        assert!(delivered, "no delivery completed");
+        assert!(w.city.buildings[venue as usize].stock > venue_stock_before, "venue not restocked");
+        // Money only moved venue->farm: total (wallets + balances) unchanged by delivery,
+        // up to whatever wages minted in these ticks.
+        let drift = (w.total_money() - total_before - w.minted).abs();
+        assert!(drift < 0.5, "conservation drift {drift}");
+    }
+
+    #[test]
+    fn leftover_cargo_returns_to_the_farm() {
+        let mut w = World::new(2161, 48);
+        let farm = w.city.buildings.iter().find(|b| b.kind == BuildingKind::HydroFarm).unwrap().id;
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        w.city.buildings[farm as usize].stock = 100.0;
+        // Venue is broke and nearly full: it can buy almost nothing, so the load returns.
+        w.city.buildings[venue as usize].stock = 19.0; // below threshold (20) -> ordered
+        w.city.buildings[venue as usize].balance = 0.0;
+        let driver = w.city.buildings[farm as usize].workers.first().copied()
+            .unwrap_or_else(|| { w.citizens[0].job = Some(crate::sim::citizen::Job { workplace: farm, shift_start: 0, shift_end: 24, wage_per_hour: 10.0, unpaid_hours: 0 }); w.city.buildings[farm as usize].workers.push(0); 0 });
+        // Ensure driver's shift covers hour 0 (world starts at tick 0 / hour 0).
+        if let Some(job) = w.citizens[driver].job.as_mut() { job.shift_start = 0; job.shift_end = 24; }
+        w.citizens[driver].state = CitizenState::Performing { at: farm, activity: Activity::Work };
+        w.city.buildings[farm as usize].occupants.push(driver);
+
+        // Fill all other venues so only `venue` is needy (stock < ORDER_THRESHOLD).
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind.is_food() && b.id != venue) {
+            b.stock = economy::STOCK_CAP;
+        }
+        let farm_meals_before = w.city.buildings[farm as usize].stock; // 100
+        // Run long enough for a full round trip back to Parked.
+        for _ in 0..(TICKS_PER_HOUR * 4) { w.tick(); }
+        // Farm produced some during 06-22, and the unsold load came back; the farm's
+        // meal total should not have permanently lost the dispatched cargo.
+        let farm_now = w.city.buildings[farm as usize].stock;
+        let venue_now = w.city.buildings[venue as usize].stock;
+        assert!(farm_now + venue_now >= farm_meals_before - 1.0,
+            "meals leaked: farm {farm_now} + venue {venue_now} < {farm_meals_before}");
     }
 
     #[test]

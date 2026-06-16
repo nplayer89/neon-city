@@ -85,6 +85,16 @@ pub fn format_event(world: &World, ev: &SimEvent) -> (String, Selection) {
             ),
             Selection::Citizen(citizen),
         ),
+        EventKind::DeliveryCompleted { farm, venue, meals } => (
+            format!(
+                "[{stamp}] {} #{:03} delivered {meals} meals to {} #{:03}",
+                world.city.buildings[farm as usize].kind.name(),
+                farm,
+                world.city.buildings[venue as usize].kind.name(),
+                venue
+            ),
+            Selection::Building(venue),
+        ),
     }
 }
 
@@ -96,6 +106,7 @@ fn event_color(kind: EventKind) -> Color {
         EventKind::DailyWages { .. } => CYAN,
         EventKind::EmployerInsolvent { .. } => Color::new(1.0, 0.55, 0.15, 1.0),
         EventKind::WorkerQuit { .. } => Color::new(1.0, 0.55, 0.45, 1.0),
+        EventKind::DeliveryCompleted { .. } => Color::new(0.4, 0.9, 1.0, 1.0),
     }
 }
 

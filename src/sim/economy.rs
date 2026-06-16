@@ -1,4 +1,4 @@
-use crate::sim::city::{BuildingKind, City};
+use crate::sim::city::BuildingKind;
 use crate::sim::time::TICKS_PER_HOUR;
 
 pub fn meal_price(kind: BuildingKind) -> f32 {
@@ -76,92 +76,10 @@ pub fn wholesale_price(supply: f32, demand: f32) -> f32 {
     WHOLESALE_BASE * (demand / (supply + 1.0)).clamp(PRICE_LO_MULT, PRICE_HI_MULT)
 }
 
-/// Hourly tick: farms grow food and sell it to venues at WHOLESALE_BASE.
-/// Each venue buys its even share, limited by the stock cap and its balance;
-/// payment splits evenly across farms (equal output). Undelivered output is
-/// lost — farms holding stock arrives with trucks in Phase 3.
-pub fn distribute_food(city: &mut City, hour: u32) {
-    if !(6..22).contains(&hour) {
-        return;
-    }
-    let farms: Vec<usize> = city
-        .buildings
-        .iter()
-        .filter(|b| b.kind == BuildingKind::HydroFarm)
-        .map(|b| b.id as usize)
-        .collect();
-    let venues: Vec<usize> = city
-        .buildings
-        .iter()
-        .filter(|b| b.kind.is_food())
-        .map(|b| b.id as usize)
-        .collect();
-    if venues.is_empty() || farms.is_empty() {
-        return;
-    }
-    let share = farms.len() as f32 * FARM_OUTPUT_PER_HOUR / venues.len() as f32;
-    let mut wholesale_total = 0.0;
-    for id in venues {
-        let b = &mut city.buildings[id];
-        let take = share
-            .min((STOCK_CAP - b.stock).max(0.0))
-            .min(b.balance / WHOLESALE_BASE);
-        if take <= 0.0 {
-            continue;
-        }
-        b.stock += take;
-        let cost = (take * WHOLESALE_BASE).min(b.balance);
-        b.balance -= cost;
-        wholesale_total += cost;
-    }
-    let per_farm = wholesale_total / farms.len() as f32;
-    for id in farms {
-        city.buildings[id].balance += per_farm;
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::rng::Rng;
-
-    #[test]
-    fn farms_stock_food_venues() {
-        let mut city = City::generate(&mut Rng::new(2));
-        for b in city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
-            b.stock = 0.0;
-        }
-        distribute_food(&mut city, 10);
-        for b in city.buildings.iter().filter(|b| b.kind.is_food()) {
-            assert!(b.stock > 0.0);
-        }
-    }
-
-    #[test]
-    fn no_production_at_night() {
-        let mut city = City::generate(&mut Rng::new(2));
-        for b in city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
-            b.stock = 0.0;
-        }
-        distribute_food(&mut city, 3);
-        for b in city.buildings.iter().filter(|b| b.kind.is_food()) {
-            assert_eq!(b.stock, 0.0);
-        }
-    }
-
-    #[test]
-    fn stock_caps() {
-        let mut city = City::generate(&mut Rng::new(2));
-        for b in city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
-            b.balance = 1_000_000.0;
-        }
-        for _ in 0..1000 {
-            distribute_food(&mut city, 10);
-        }
-        for b in city.buildings.iter().filter(|b| b.kind.is_food()) {
-            assert!(b.stock <= STOCK_CAP);
-        }
-    }
 
     #[test]
     fn retail_covers_wholesale() {
@@ -178,52 +96,6 @@ mod tests {
         assert_eq!(wage_range(BuildingKind::HydroFarm), (9.0, 11.0));
         assert_eq!(wage_range(BuildingKind::DataCenter), (11.0, 18.0));
         assert_eq!(wage_range(BuildingKind::FusionPlant), (11.0, 18.0));
-    }
-
-    #[test]
-    fn distribution_charges_venues_and_pays_farms() {
-        let mut city = City::generate(&mut Rng::new(2));
-        for b in city.buildings.iter_mut().filter(|b| b.kind.is_food()) {
-            b.stock = 0.0;
-        }
-        let venues_before: f32 =
-            city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.balance).sum();
-        let farms_before: f32 = city
-            .buildings
-            .iter()
-            .filter(|b| b.kind == BuildingKind::HydroFarm)
-            .map(|b| b.balance)
-            .sum();
-        distribute_food(&mut city, 10);
-        let venues_after: f32 =
-            city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.balance).sum();
-        let farms_after: f32 = city
-            .buildings
-            .iter()
-            .filter(|b| b.kind == BuildingKind::HydroFarm)
-            .map(|b| b.balance)
-            .sum();
-        assert!(venues_after < venues_before, "venues paid nothing");
-        let paid = venues_before - venues_after;
-        let received = farms_after - farms_before;
-        assert!((paid - received).abs() < 1e-3, "leak: paid {paid}, received {received}");
-        let stocked: f32 =
-            city.buildings.iter().filter(|b| b.kind.is_food()).map(|b| b.stock).sum();
-        assert!(
-            (paid - stocked * WHOLESALE_BASE).abs() < 1e-3,
-            "paid {paid} != {stocked} meals x wholesale"
-        );
-    }
-
-    #[test]
-    fn broke_venue_gets_no_stock() {
-        let mut city = City::generate(&mut Rng::new(2));
-        let id = city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id as usize;
-        city.buildings[id].stock = 0.0;
-        city.buildings[id].balance = 0.0;
-        distribute_food(&mut city, 10);
-        assert_eq!(city.buildings[id].stock, 0.0);
-        assert_eq!(city.buildings[id].balance, 0.0);
     }
 
     #[test]
