@@ -68,5 +68,6 @@ pub fn draw_world(world: &World, cam: &Camera, t: f32, selected_building: Option
 
     buildings::draw_neon(world, cam, t, amb);
     traffic.draw(cam, world.tick);
+    agents::draw_trucks(world, cam, t);
     agents::draw_citizens(world, cam, t);
 }

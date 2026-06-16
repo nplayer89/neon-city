@@ -69,8 +69,8 @@ async fn main() {
         ui::hud::draw_hud(&world, &mut hud);
         let (hovered, roster_clicked) = roster.draw(&world, &mut hud);
         if roster_clicked {
-            if let Some(id) = hovered {
-                inspector.selection = ui::inspector::Selection::Citizen(id);
+            if let Some(sel) = hovered {
+                inspector.selection = sel;
                 inspector.follow = false;
             }
         }

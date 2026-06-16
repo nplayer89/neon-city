@@ -5,5 +5,6 @@ pub mod path;
 pub mod citizen;
 pub mod economy;
 pub mod event;
+pub mod logistics;
 pub mod ai;
 pub mod world;
