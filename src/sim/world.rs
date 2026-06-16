@@ -126,6 +126,9 @@ impl World {
     pub fn tick(&mut self) {
         self.tick += 1;
         let (tick, hour, night) = (self.tick, self.hour(), time::is_night(self.tick));
+        if self.tick % TICKS_PER_HOUR == 0 {
+            process_closures(&mut self.city, &mut self.citizens, tick, &mut self.events);
+        }
         let city = &mut self.city;
         let rng = &mut self.rng;
         let events = &mut self.events;
@@ -198,6 +201,44 @@ impl World {
         }
         h = mix(h, self.minted.to_bits() as u64);
         h
+    }
+}
+
+/// Hourly: a food venue that can't afford one wholesale meal accrues broke
+/// hours; past the grace period it closes for good — occupants ejected, frozen
+/// balance, dropped from orders/AI. Food venues are unstaffed, so the defensive
+/// worker layoff is a no-op here.
+fn process_closures(city: &mut City, citizens: &mut [Citizen], tick: u64, events: &mut VecDeque<SimEvent>) {
+    let (supply, demand) = logistics::supply_demand(city);
+    let price = economy::wholesale_price(supply, demand);
+    let venues: Vec<u16> = city
+        .buildings
+        .iter()
+        .filter(|b| b.kind.is_food() && b.open())
+        .map(|b| b.id)
+        .collect();
+    for id in venues {
+        let b = &mut city.buildings[id as usize];
+        if b.balance < price {
+            b.hours_broke += 1;
+        } else {
+            b.hours_broke = 0;
+        }
+        if b.hours_broke >= economy::CLOSURE_GRACE_HOURS {
+            b.closed = true;
+            b.hours_broke = 0; // counter is meaningless once closed; reset so it reads clean
+            let door = b.door;
+            let occ = std::mem::take(&mut b.occupants);
+            let workers = std::mem::take(&mut b.workers); // empty for venues; defensive
+            for o in occ {
+                citizens[o].pos = (door.0 as f32 + 0.5, door.1 as f32 + 0.5);
+                citizens[o].state = CitizenState::Idle { until: tick + 1 };
+            }
+            for wkr in workers {
+                citizens[wkr].job = None;
+            }
+            push_event(events, SimEvent { tick, kind: EventKind::BusinessClosed { building: id } });
+        }
     }
 }
 
@@ -360,9 +401,9 @@ fn arrive(c: &mut Citizen, city: &mut City, b: u16, act: Activity, tick: u64, ev
     let building = &mut city.buildings[b as usize];
     match act {
         Activity::Eat => {
-            // Stock ran out mid-walk; stay silent — VenueSoldOut already fired
-            // when the last meal sold.
-            if building.stock < 1.0 {
+            // Stock ran out mid-walk (or venue closed); stay silent — VenueSoldOut
+            // already fired when the last meal sold.
+            if !building.open() || building.stock < 1.0 {
                 c.state = CitizenState::Idle { until: tick + 60 };
                 return;
             }
@@ -973,6 +1014,36 @@ mod tests {
         let venue_now = w.city.buildings[venue as usize].stock;
         assert!(farm_now + venue_now >= farm_meals_before - 1.0,
             "meals leaked: farm {farm_now} + venue {venue_now} < {farm_meals_before}");
+    }
+
+    #[test]
+    fn chronically_broke_venue_closes_once_and_ejects() {
+        let mut w = World::new(2161, 48);
+        let venue = w.city.buildings.iter().find(|b| b.kind.is_food()).unwrap().id;
+        // Strand the venue: broke and empty, and zero every farm so no truck can
+        // ever recapitalize it.
+        w.city.buildings[venue as usize].balance = 0.0;
+        w.city.buildings[venue as usize].stock = 0.0;
+        for b in w.city.buildings.iter_mut().filter(|b| b.kind == BuildingKind::HydroFarm) {
+            b.stock = 0.0;
+        }
+        let mut closed_events = 0;
+        let balance_at_close = std::cell::Cell::new(-1.0f32);
+        // CLOSURE_GRACE_HOURS = 24; run ~26 hours.
+        for _ in 0..(TICKS_PER_HOUR * 26) {
+            w.tick();
+            for ev in w.drain_events() {
+                if matches!(ev.kind, EventKind::BusinessClosed { building } if building == venue) {
+                    closed_events += 1;
+                    balance_at_close.set(w.city.buildings[venue as usize].balance);
+                }
+            }
+        }
+        assert_eq!(closed_events, 1, "closure must fire exactly once");
+        assert!(w.city.buildings[venue as usize].closed, "venue not marked closed");
+        assert!(w.city.buildings[venue as usize].occupants.is_empty(), "occupants not ejected");
+        // Balance is frozen after closing (conservation): unchanged from close onward.
+        assert_eq!(w.city.buildings[venue as usize].balance, balance_at_close.get());
     }
 
     #[test]

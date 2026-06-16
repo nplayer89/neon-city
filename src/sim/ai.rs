@@ -57,10 +57,10 @@ pub fn choose_action(
         }
     }
 
-    // Food venues: must have stock and be affordable.
+    // Food venues: must be open, have stock, and be affordable.
     if c.needs.hunger < ACT_BELOW {
         for b in city.buildings_of(|k: BuildingKind| k.is_food()) {
-            if b.stock < 1.0 || c.money < economy::meal_price(b.kind) {
+            if !b.open() || b.stock < 1.0 || c.money < economy::meal_price(b.kind) {
                 continue;
             }
             let s = urgency(c.needs.hunger) * weight(NeedKind::Hunger) - dist(b.door);
@@ -73,7 +73,7 @@ pub fn choose_action(
     // Leisure.
     if c.needs.fun < ACT_BELOW {
         for b in city.buildings_of(|k: BuildingKind| k.is_leisure()) {
-            if c.money < economy::fun_price(b.kind) {
+            if !b.open() || c.money < economy::fun_price(b.kind) {
                 continue;
             }
             let s = urgency(c.needs.fun) * weight(NeedKind::Fun) - dist(b.door);
