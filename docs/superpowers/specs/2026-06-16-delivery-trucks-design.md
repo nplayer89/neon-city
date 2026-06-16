@@ -153,10 +153,13 @@ Each hour, for every open food venue: if `balance < wholesale spot price`
 `hours_broke ≥ CLOSURE_GRACE_HOURS` the venue **closes**:
 
 - `closed = true`; emit `BusinessClosed { building }`.
-- Lay off workers: for each id in `workers`, set that citizen's `job = None`
-  and clear their `Performing`/path back to `Idle` if they were on site; clear
-  `workers`.
-- Eject `occupants` to the door, `Idle`.
+- Eject `occupants` (the customers inside) to the door, `Idle`; clear
+  `occupants`.
+- (Note: food venues are *unstaffed* in this sim — `is_workplace()` excludes
+  them and citizens only hold jobs at workplaces — so there are no employees to
+  lay off. The roadmap's "workers laid off" is generic; concretely a venue's
+  `workers` list is already empty. The defensive layoff loop is kept but is a
+  no-op for venues.)
 - It no longer appears as an order target, dispatch target, or AI target
   (`open()` is false), and trucks already `Outbound` to it abort to `Returning`
   on arrival (deliver nothing to a closed venue).
@@ -251,8 +254,9 @@ World-level tests (deterministic, no rendering):
 6. **Leftover returns:** delivering to a near-full / broke venue returns the
    remainder to farm `stock` (meal conservation).
 7. **Closure:** a venue held broke for `CLOSURE_GRACE_HOURS` closes, fires
-   `BusinessClosed` once, lays off its workers (`job = None`, `workers` empty),
-   and stops receiving deliveries; its balance is unchanged afterward.
+   `BusinessClosed` once, ejects its occupants, drops out of AI/dispatch
+   targeting, and stops receiving deliveries; its balance is unchanged
+   afterward. (Venues are unstaffed, so there are no workers to lay off.)
 8. **Conservation soak:** ≥3 game days at the shipped seed —
    `|total − initial − minted| < 0.5` still holds under lagged delivery and
    dynamic price; at least one farm stays solvent with workers; and venues keep
