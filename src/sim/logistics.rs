@@ -166,7 +166,10 @@ pub fn tick(
                     let door;
                     {
                         let fb = &mut city.buildings[farm as usize];
-                        fb.stock = (fb.stock + trucks[i].cargo).min(economy::FARM_STOCK_CAP);
+                        // Returned leftover was farm stock moments ago (subtracted at
+                        // dispatch); re-admit it uncapped so meals are never destroyed.
+                        // FARM_STOCK_CAP bounds only fresh hourly production, not returns.
+                        fb.stock += trucks[i].cargo;
                         door = fb.door;
                     }
                     trucks[i].cargo = 0.0;
