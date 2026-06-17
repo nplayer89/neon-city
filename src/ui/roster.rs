@@ -1,6 +1,6 @@
 use crate::sim::citizen::NEED_KINDS;
 use crate::sim::city::{BuildingKind, City};
-use crate::sim::economy::WHOLESALE_PRICE;
+use crate::sim::economy::WHOLESALE_BASE;
 use crate::sim::world::World;
 use crate::ui::hud::{over, HudState, CYAN, PANEL, PANEL_EDGE};
 use crate::ui::inspector::Selection;
@@ -117,7 +117,7 @@ pub fn business_detail(kind: BuildingKind, stock: f32, workers: usize) -> String
 /// can't afford its next wholesale meal. Industry (no books yet) only trips
 /// via the insolvent flag; arcades never struggle.
 pub fn business_struggling(kind: BuildingKind, balance: f32, insolvent: bool) -> bool {
-    (kind.is_workplace() && insolvent) || (kind.is_food() && balance < WHOLESALE_PRICE)
+    (kind.is_workplace() && insolvent) || (kind.is_food() && balance < WHOLESALE_BASE)
 }
 
 /// Draws text clipped to `max_w` so long names never run under the icons.
@@ -368,8 +368,8 @@ mod tests {
         use crate::sim::city::BuildingKind::*;
         assert!(business_struggling(HydroFarm, 500.0, true), "insolvent employer");
         assert!(!business_struggling(HydroFarm, 0.0, false), "farms are judged by payroll, not restock");
-        assert!(business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_PRICE - 0.01, false), "venue below one meal");
-        assert!(!business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_PRICE, false), "boundary: exactly one meal");
+        assert!(business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_BASE - 0.01, false), "venue below one meal");
+        assert!(!business_struggling(NoodleBar, crate::sim::economy::WHOLESALE_BASE, false), "boundary: exactly one meal");
         assert!(!business_struggling(Arcade, 0.0, false), "arcades never struggle");
         assert!(!business_struggling(DataCenter, 0.0, false), "industry balance is meaningless");
     }
